@@ -1,0 +1,29 @@
+# dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# turbo
+.turbo/
+
+# build outputs
+dist/
+.next/
+out/
+build/
+
+# env
+.env
+.env*.local
+
+# logs
+npm-debug.log*
+*.log
+
+# editor / os
+.DS_Store
+.vscode/*
+!.vscode/extensions.json
+
+# nest
+apps/api/dist/
