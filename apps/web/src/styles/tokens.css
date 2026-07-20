@@ -1,0 +1,55 @@
+/**
+ * Ledger palette — locked in docs/cogent-ui-implementation-spec.md §1.1.
+ * Light is the default brand call; dark is the accommodation (§0.3).
+ * Do not hardcode these hex/rgba values anywhere outside this file —
+ * components must read colors via the Tailwind tokens mapped in globals.css.
+ */
+
+:root {
+  --bg: #f7f4ec;
+  --surface: #fffdf7;
+  --inset: #f0ebdd;
+  --border: #e2dcc9;
+  --border-strong: #d3cbb2;
+  --text: #221f16;
+  --text-muted: #7a7460;
+  --text-faint: #9a9481;
+  --accent: #2f5d3e;
+  --accent-ink: #234a30;
+  --accent-tint: rgba(47, 93, 62, 0.1);
+  --on-accent: #fffdf7;
+  --ok: #3e7a45;
+  --warn: #a9791c;
+  --warn-ink: #7c5810;
+  --warn-tint: rgba(169, 121, 28, 0.12);
+  --danger: #a13a2e;
+  --danger-ink: #7e2c22;
+  --danger-tint: rgba(161, 58, 46, 0.1);
+
+  /* Elevation (§1.3): shadow only on floating layers (menus, popovers, sheets). */
+  --shadow-float: 0 6px 20px rgba(0, 0, 0, 0.08);
+}
+
+[data-theme="dark"] {
+  --bg: #12140f;
+  --surface: #1b1e16;
+  --inset: #171a12;
+  --border: #2c3024;
+  --border-strong: #3a3f2e;
+  --text: #eae7da;
+  --text-muted: #8b8873;
+  --text-faint: #6e6b58;
+  --accent: #4e8a62;
+  --accent-ink: #8fc49e;
+  --accent-tint: rgba(78, 138, 98, 0.15);
+  --on-accent: #0e1510;
+  --ok: #5fa868;
+  --warn: #d0a03a;
+  --warn-ink: #e0be73;
+  --warn-tint: rgba(208, 160, 58, 0.15);
+  --danger: #e0645a;
+  --danger-ink: #f0a29b;
+  --danger-tint: rgba(224, 100, 90, 0.15);
+
+  --shadow-float: 0 6px 24px rgba(0, 0, 0, 0.5);
+}
