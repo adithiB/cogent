@@ -1,0 +1,19 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: cogent
+      POSTGRES_PASSWORD: cogent_dev_only
+      POSTGRES_DB: cogent
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cogent -d cogent"]
+      interval: 2s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  postgres_data:
