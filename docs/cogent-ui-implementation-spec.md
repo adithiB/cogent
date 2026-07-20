@@ -86,6 +86,7 @@ Both accent and semantics **re-anchor** per theme (they are not lightness invers
 - Data: a single `QueryClient` (TanStack Query) at the app root.
 
 ### 1.6 Multi-tenancy legibility (global, applies to every authenticated screen)
+> **Schema note (ADR-0001):** role and org membership live on a `memberships(user_id, org_id, role)` join table, not a column on `users`. A single `users.org_id` would make the switch behavior below unreachable — the model has to support one user in more than one org before the switcher can be anything but decoration. MVP signup produces exactly one membership per user, so the switcher renders the current org name as text (below) without yet offering a second option — the interaction is deferred, not the schema.
 - OrgSwitcher is always present in the top bar and always renders the **current org name as text** (not icon-only). It's a `button` with `aria-haspopup="menu"` / `aria-expanded`.
 - `orgId` is read server-side from the JWT claim and injected into every query. It is never a client-controllable parameter and never appears in a URL.
 - On **org switch**: refetch scoped data, **clear the transient query log**, reset the Budgets form to the new org's scopes/alerts, move focus to the primary heading, and announce via `aria-live="polite"` ("Now viewing Northwind Labs").
