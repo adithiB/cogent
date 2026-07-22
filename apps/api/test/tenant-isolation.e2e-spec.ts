@@ -443,6 +443,42 @@ describe('Tenant isolation — API-key ingestion credential (ADR-0002 §2c)', ()
     expect(row?.orgId).toBe(orgC.id);
   });
 
+  it('UNIQUE(org_id, external_id) rejects a duplicate externalId (409), and does not double-insert', async () => {
+    // ADR-0002 §1d/§2d: this constraint is what makes the future queue's
+    // at-least-once delivery safe (`ON CONFLICT (org_id, external_id) DO
+    // NOTHING`). An unenforced constraint here would be a silent hole in
+    // that escalation story — verified now, not assumed.
+    const externalId = `iso-ingest-evt-dup-${Date.now()}`;
+    const body = {
+      externalId,
+      occurredAt: '2026-01-01T12:02:00Z',
+      project: 'ingest-proj',
+      team: 'ingest-team',
+      model: 'gpt-4o',
+      latencyMs: 175,
+      isError: false,
+      costMicros: 2_000_000,
+    };
+
+    const first = await request(app.getHttpServer())
+      .post('/api/v1/events')
+      .set('Authorization', `Bearer ${apiKeyC}`)
+      .send(body);
+    expect(first.status).toBe(201);
+
+    const second = await request(app.getHttpServer())
+      .post('/api/v1/events')
+      .set('Authorization', `Bearer ${apiKeyC}`)
+      .send(body);
+    expect(second.status).toBe(409);
+
+    const rows = await db.query.usageEvents.findMany({
+      where: eq(usageEvents.externalId, externalId),
+    });
+    expect(rows).toHaveLength(1);
+    expect(rows[0].costMicros).toBe(2_000_000);
+  });
+
   it('a payload-supplied orgId naming another org is rejected at the boundary (400), and writes nothing', async () => {
     const externalId = `iso-ingest-evt-spoof-${Date.now()}`;
 
@@ -475,6 +511,22 @@ describe('Tenant isolation — API-key ingestion credential (ADR-0002 §2c)', ()
 
   it("org D's key cannot be used to write or read as org C — the credential resolves only its own org", async () => {
     const externalId = `iso-ingest-evt-d1-${Date.now()}`;
+    const usageEventsRepo = app.get(UsageEventsRepository);
+    const scopeC = scopeFromVerifiedClaims({
+      sub: 'service:ingestion',
+      org: orgC.id,
+      role: Role.Member,
+    });
+    const window = {
+      from: new Date('2026-01-01T00:00:00Z'),
+      to: new Date('2026-01-02T00:00:00Z'),
+    };
+
+    // Captured *before* D's write, not hardcoded — other tests in this
+    // block also write under org C, so the correct claim is "D's write
+    // changes nothing about what C's own scoped read sees," not "C's
+    // total is some fixed number that happens to depend on test order."
+    const spendCBefore = await usageEventsRepo.getSpend(scopeC, { window });
 
     await request(app.getHttpServer())
       .post('/api/v1/events')
@@ -498,27 +550,17 @@ describe('Tenant isolation — API-key ingestion credential (ADR-0002 §2c)', ()
     expect(rowD?.orgId).toBe(orgD.id);
     expect(rowD?.orgId).not.toBe(orgC.id);
 
-    // And a read scoped by C's own key-derived scope never includes it —
+    // And a read scoped by C's own key-derived scope is unchanged by it —
     // closes the loop from write (API-key guard) through read (query layer)
     // over the same real HTTP-authenticated credential.
-    const usageEventsRepo = app.get(UsageEventsRepository);
-    const scopeC = scopeFromVerifiedClaims({
-      sub: 'service:ingestion',
-      org: orgC.id,
-      role: Role.Member,
-    });
-    const spendC = await usageEventsRepo.getSpend(scopeC, {
-      window: {
-        from: new Date('2026-01-01T00:00:00Z'),
-        to: new Date('2026-01-02T00:00:00Z'),
-      },
-    });
-    expect(spendC).toEqual({
-      intent: 'point',
-      metric: 'spend',
-      value: 1,
-      unit: 'usd',
-    });
+    const spendCAfter = await usageEventsRepo.getSpend(scopeC, { window });
+    expect(spendCAfter).toEqual(spendCBefore);
+    // `intent`/`metric` are structural, not order-dependent — worth pinning
+    // even though the absolute `value` isn't (other tests in this block
+    // also write under org C, so a hardcoded total would be exactly the
+    // test-order coupling this rewrite exists to remove).
+    expect(spendCAfter.intent).toBe('point');
+    expect(spendCAfter.metric).toBe('spend');
   });
 
   it('missing/invalid API key is rejected (401) before any scope is constructed', async () => {

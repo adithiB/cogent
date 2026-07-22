@@ -3,12 +3,19 @@ import { UsageEventsRepository } from '../db/repositories/usage-events.repositor
 import type { TenantScope } from '../db/scope';
 import type { IngestEventDto } from './dto/ingest-event.dto';
 
+/**
+ * drizzle-orm's node-postgres driver wraps the raw `pg` `DatabaseError` in
+ * its own error, whose own properties are `query`/`params`/`cause` — the
+ * real `code`/`constraint` fields live one level down, on `.cause`, not on
+ * the thrown error itself (mirrors the identical fix in auth.service.ts).
+ */
 function isUniqueViolation(err: unknown, constraint: string): boolean {
+  const pg = (err as { cause?: unknown })?.cause ?? err;
   return (
-    typeof err === 'object' &&
-    err !== null &&
-    (err as { code?: string }).code === '23505' &&
-    (err as { constraint?: string }).constraint === constraint
+    typeof pg === 'object' &&
+    pg !== null &&
+    (pg as { code?: string }).code === '23505' &&
+    (pg as { constraint?: string }).constraint === constraint
   );
 }
 
