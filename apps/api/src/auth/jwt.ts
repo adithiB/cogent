@@ -1,4 +1,4 @@
-import { SignJWT, jwtVerify, errors } from 'jose';
+import { SignJWT, jwtVerify, errors, type JWTPayload } from 'jose';
 import type { Role } from '../db/scope';
 
 /** ADR-0001 §1b: 15 minutes, because the access-token TTL *is* the blast
@@ -17,7 +17,10 @@ function encodeSecret(secret: string): Uint8Array {
 
 /** HS256, not RS256 — one issuer, one verifier, the same process. No key
  * distribution problem exists here to justify asymmetric signing (ADR-0001 §1b). */
-export async function signAccessToken(claims: AccessTokenClaims, secret: string): Promise<string> {
+export async function signAccessToken(
+  claims: AccessTokenClaims,
+  secret: string,
+): Promise<string> {
   return new SignJWT({ org: claims.org, role: claims.role })
     .setProtectedHeader({ alg: 'HS256' })
     .setSubject(claims.sub)
@@ -29,8 +32,16 @@ export async function signAccessToken(claims: AccessTokenClaims, secret: string)
 
 export class AccessTokenInvalidError extends Error {}
 
-export async function verifyAccessToken(token: string, secret: string): Promise<AccessTokenClaims> {
-  let payload;
+export async function verifyAccessToken(
+  token: string,
+  secret: string,
+): Promise<AccessTokenClaims> {
+  // Typed explicitly — an uninitialized `let payload;` infers as `any`,
+  // which then makes every destructure and the final return object an
+  // unsafe `any` assignment. `JWTPayload` types the known claims and puts
+  // custom ones (`org`, `role`) behind an index signature typed `unknown`,
+  // which the `typeof` checks below already narrow correctly.
+  let payload: JWTPayload;
   try {
     ({ payload } = await jwtVerify(token, encodeSecret(secret)));
   } catch (err) {
@@ -41,7 +52,11 @@ export async function verifyAccessToken(token: string, secret: string): Promise<
   }
 
   const { sub, org, role } = payload;
-  if (typeof sub !== 'string' || typeof org !== 'string' || (role !== 'owner' && role !== 'member')) {
+  if (
+    typeof sub !== 'string' ||
+    typeof org !== 'string' ||
+    (role !== 'owner' && role !== 'member')
+  ) {
     throw new AccessTokenInvalidError('Malformed access token claims');
   }
   return { sub, org, role };
