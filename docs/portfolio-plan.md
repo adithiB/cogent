@@ -61,7 +61,7 @@ A platform giving engineering leads visibility into per-team/per-feature LLM API
 ### What value it adds to your candidacy
 - **Directly targets the "data and AI" demand category**, one of the four named highest-demand areas in the current market, and does so as a real product category with existing commercial comparables — proof you understand a market, not just a tech stack.
 - **The NL-query assistant, built early as core rather than cut under pressure, is the actual differentiator.** Without it, this is a well-executed but generic dashboard — the same shape as hundreds of other bootcamp/portfolio projects. With it, it's a working demonstration of LLM function-calling against a guarded, allow-listed data layer, with a hard cost cap — which is simultaneously an AI-skills proof point and a security/cost-awareness proof point (a cost-monitoring tool that doesn't monitor its own AI feature's cost is an obvious interview gotcha, and having already thought about it is a strong "second-order effects" story).
-- **The two-database design (Postgres + DynamoDB) and the auth contrast with Atlas** (a reasoned dev-IdP stub there, ADR-0007 — vs. a hand-rolled JWT + org-scoped RBAC system here, ADR-0001) both demonstrate range and judgment — two decisions in opposite directions, both argued from the same rule ("build what your project's claim is about, stub what it merely consumes"), rather than one purchase and one build.
+- **The single-store usage decision (Postgres, DynamoDB evaluated and rejected — ADR-0002) and the auth contrast with Atlas** (a reasoned dev-IdP stub there, ADR-0007 — vs. a hand-rolled JWT + org-scoped RBAC system here, ADR-0001) both demonstrate range and judgment — two decisions in opposite directions, both argued from the same rule ("build what your project's claim is about, stub what it merely consumes"), rather than one purchase and one build.
 - **NestJS again**, reinforcing the same backend pattern from Atlas — you're not learning a new backend framework per project, you're deepening one, which is a more defensible growth story than shallow breadth.
 
 ### Core MVP (must ship, in this build order — NL-query is not last)
@@ -76,7 +76,8 @@ A platform giving engineering leads visibility into per-team/per-feature LLM API
 Spend-anomaly detection, multi-provider price normalization, full EventBridge aggregation pipeline, CDK/Lambda live deploy (document the deploy design via ADR if it comes to this), full a11y audit, contract tests.
 
 ### Resume bullets
-- "Built a full-stack multi-tenant LLM observability platform (Next.js, NestJS, AWS Lambda) with polyglot persistence (Postgres + DynamoDB) and a cost-capped, allow-listed natural-language query assistant over usage data."
+- "Built a full-stack multi-tenant LLM observability platform (Next.js, NestJS, AWS Lambda) with a cost-capped, allow-listed natural-language query assistant over usage data."
+- "Evaluated DynamoDB vs. Postgres for a multi-tenant usage-metering store and rejected DynamoDB after tracing its hot-partition failure mode through to its own mitigation — the fix degrades the product's core aggregation read path; chose Postgres and documented the concrete escalation trigger (time-range partitioning) for the scale at which it wouldn't hold." (ADR-0002)
 - "Designed org-scoped RBAC enforced at the data-access layer and hand-rolled JWT auth, with defense-in-depth tenant isolation."
 
 ### Interview questions to rehearse
@@ -152,7 +153,7 @@ Tie every post to something real you just did — don't post to stay "active." T
 |---|---|
 | Atlas: host + remotes | Why Module Federation over an iframe/single-SPA approach; what "independent deployability" actually looks like in practice |
 | Atlas: AI-assistant remote | Delivering an AI feature as a federated module — what that proves about the architecture pattern |
-| Cogent-AI: two-database design | The Postgres vs. DynamoDB trade-off, said out loud — this is genuinely good LinkedIn content, it's the same "senior-level answer" line from the interview-prep section |
+| Cogent-AI: usage-store decision | Why I did *not* reach for DynamoDB — the hot-partition failure mode traced through to its own mitigation, and why that fix defeats itself for an aggregation-heavy read path. "Chose not to add a database" is the stronger judgment signal, and a harder sentence to fake than "I used two databases" |
 | Cogent-AI: NL-query assistant | Cost-capping an AI feature — the second-order-effects story |
 | Portfolio site | Launch post once live, linking both case studies |
 
