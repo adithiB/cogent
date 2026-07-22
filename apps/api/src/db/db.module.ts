@@ -8,12 +8,16 @@ import { OrgsRepository } from './repositories/orgs.repository';
 import { UsersRepository } from './repositories/users.repository';
 import { MembershipsRepository } from './repositories/memberships.repository';
 import { RefreshTokensRepository } from './repositories/refresh-tokens.repository';
+import { ApiKeysRepository } from './repositories/api-keys.repository';
+import { UsageEventsRepository } from './repositories/usage-events.repository';
 
 const repositories = [
   OrgsRepository,
   UsersRepository,
   MembershipsRepository,
   RefreshTokensRepository,
+  ApiKeysRepository,
+  UsageEventsRepository,
 ];
 
 @Global()
@@ -24,7 +28,9 @@ const repositories = [
       provide: DRIZZLE,
       inject: [ConfigService],
       useFactory: (config: ConfigService): Database => {
-        const pool = new Pool({ connectionString: config.getOrThrow<string>('DATABASE_URL') });
+        const pool = new Pool({
+          connectionString: config.getOrThrow<string>('DATABASE_URL'),
+        });
         return drizzle(pool, { schema });
       },
     },
