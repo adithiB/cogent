@@ -39,9 +39,18 @@ export type MetricResult =
       rows: { key: string; value: number }[];
     };
 
+/**
+ * ADR-0004 §Findings(1): `filter` was missing here, so a `slice` answer whose
+ * question carried one (e.g. "spend by model for team checkout") would
+ * silently drop it on re-scope — the statement would show every team's
+ * models, not just checkout's, contradicting spec §1.8's "re-scope the
+ * statement *to that filter*". Reuses `MetricFilter` exactly — the same
+ * shape and predicate the metric functions already apply.
+ */
 export interface StatementArgs {
   window: TimeWindow;
   groupBy: Dimension;
+  filter?: MetricFilter;
 }
 
 /** cogent-ui-implementation-spec.md §2.2's table columns:

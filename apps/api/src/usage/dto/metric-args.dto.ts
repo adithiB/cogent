@@ -36,7 +36,13 @@ export const metricArgsSchema = z
   .strict();
 export type MetricArgsDto = z.infer<typeof metricArgsSchema>;
 
+/** ADR-0004 §Findings(1): `filter` added so a `slice` re-scope can carry the
+ * same scope the answer was computed under — see `usage/types.ts`. */
 export const statementArgsSchema = z
-  .object({ window: timeWindowSchema, groupBy: dimensionSchema })
+  .object({
+    window: timeWindowSchema,
+    groupBy: dimensionSchema,
+    filter: metricFilterSchema.optional(),
+  })
   .strict();
 export type StatementArgsDto = z.infer<typeof statementArgsSchema>;

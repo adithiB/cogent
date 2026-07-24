@@ -212,11 +212,19 @@ export class UsageEventsRepository {
     scope: TenantScope,
     args: StatementArgs,
   ): Promise<{ rows: StatementRow[]; totals: StatementRow }> {
-    const where = and(
+    const clauses = [
       orgScope(usageEvents.orgId, scope),
       gte(usageEvents.occurredAt, args.window.from),
       lt(usageEvents.occurredAt, args.window.to),
-    );
+    ];
+    // ADR-0004 §Findings(1): without this, a slice answer's filter (e.g.
+    // "for team checkout") was silently dropped on re-scope — the same
+    // filter clause the metric functions apply, added here so §1.8's
+    // "re-scope the statement to that filter" is actually true.
+    if (args.filter) {
+      clauses.push(eq(dimensionColumn(args.filter.dimension), args.filter.value));
+    }
+    const where = and(...clauses);
     const groupCol = dimensionColumn(args.groupBy);
 
     const rows = await this.db

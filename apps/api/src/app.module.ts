@@ -5,6 +5,7 @@ import { AppService } from './app.service';
 import { DbModule } from './db/db.module';
 import { AuthModule } from './auth/auth.module';
 import { IngestModule } from './ingest/ingest.module';
+import { AssistantModule } from './assistant/assistant.module';
 
 @Module({
   imports: [
@@ -12,6 +13,7 @@ import { IngestModule } from './ingest/ingest.module';
     DbModule,
     AuthModule,
     IngestModule,
+    AssistantModule,
   ],
   controllers: [AppController],
   providers: [AppService],
