@@ -10,6 +10,31 @@ import { Role, scopeFromVerifiedClaims } from '../src/db/scope';
 import { MembershipsRepository } from '../src/db/repositories/memberships.repository';
 import { OrgsRepository } from '../src/db/repositories/orgs.repository';
 import { UsageEventsRepository } from '../src/db/repositories/usage-events.repository';
+import { ACCESS_COOKIE } from '../src/auth/cookies';
+import { OllamaAssistantClient } from '../src/assistant/ollama-client';
+
+/**
+ * ADR-0004, re-targeted by the 2026-07-23/24 amendment: the assistant tests
+ * below mock the local Ollama client itself — this is a portfolio project
+ * and CI has no Ollama daemon available — but exercise everything
+ * downstream of the model's tool call for real: real signup, real httpOnly
+ * session cookie, real `AuthGuard`, real dispatch, real database.
+ * `overrideProvider(OllamaAssistantClient)` replaces the pre-amendment
+ * `jest.mock('@anthropic-ai/sdk')`, scoped to this describe block's own
+ * TestingModule rather than file-wide, since Nest DI override is the
+ * correct seam for a class-based provider (§6's "one-class seam").
+ */
+
+function extractAccessCookie(res: request.Response): string {
+  const raw = res.headers['set-cookie'];
+  const cookies = Array.isArray(raw)
+    ? raw
+    : [raw].filter((c): c is string => Boolean(c));
+  const accessCookie = cookies.find((c) => c.startsWith(`${ACCESS_COOKIE}=`));
+  if (!accessCookie)
+    throw new Error(`No ${ACCESS_COOKIE} cookie in signup response.`);
+  return accessCookie.split(';')[0];
+}
 
 /**
  * ADR-0001 §Decision-3's residual mitigation: this file grows by one case
@@ -592,5 +617,245 @@ describe('Tenant isolation — API-key ingestion credential (ADR-0002 §2c)', ()
         costMicros: 100,
       });
     expect(badKey.status).toBe(401);
+  });
+});
+
+/**
+ * ADR-0004: the NL-query assistant's cross-tenant guarantee, over real HTTP
+ * with a real signed-in session and a real database. `scope` reaches the
+ * assistant identically to every other authenticated route (`AuthGuard` →
+ * `TenantScope` from the cookie) — this suite proves the model's tool call
+ * cannot redirect it, and that `getStatement`'s new `filter` param (Findings
+ * §1) actually narrows the re-scope.
+ */
+describe('Tenant isolation — NL-query assistant (ADR-0004)', () => {
+  let app: INestApplication<App>;
+  let db: Database;
+  let chatMock: jest.Mock;
+
+  let orgE: { id: string; name: string };
+  let orgF: { id: string; name: string };
+  let cookieE: string;
+  let cookieF: string;
+
+  const window = {
+    from: new Date('2026-02-01T00:00:00Z'),
+    to: new Date('2026-02-02T00:00:00Z'),
+  };
+
+  function chatResult(name: string, args: unknown) {
+    return {
+      toolCalls: [{ function: { name, arguments: args } }],
+      content: null,
+      promptEvalCount: 1200,
+      evalCount: 40,
+      totalDurationNs: 4_500_000_000,
+    };
+  }
+
+  beforeAll(async () => {
+    chatMock = jest.fn();
+
+    const moduleFixture: TestingModule = await Test.createTestingModule({
+      imports: [AppModule],
+    })
+      .overrideProvider(OllamaAssistantClient)
+      .useValue({ chat: chatMock, onModuleInit: jest.fn() })
+      .compile();
+    app = moduleFixture.createNestApplication();
+    app.setGlobalPrefix('api');
+    await app.init();
+    db = app.get(DRIZZLE);
+
+    const suffix = Date.now();
+    const signupE = await request(app.getHttpServer())
+      .post('/api/auth/signup')
+      .send({
+        email: `iso-assist-e-${suffix}@example.test`,
+        password: 'correct horse battery staple',
+        orgName: `Isolation Assistant Org E ${suffix}`,
+      })
+      .expect(201);
+    const signupF = await request(app.getHttpServer())
+      .post('/api/auth/signup')
+      .send({
+        email: `iso-assist-f-${suffix}@example.test`,
+        password: 'correct horse battery staple',
+        orgName: `Isolation Assistant Org F ${suffix}`,
+      })
+      .expect(201);
+
+    cookieE = extractAccessCookie(signupE);
+    cookieF = extractAccessCookie(signupF);
+
+    const orgRowE = await db.query.orgs.findFirst({
+      where: eq(orgs.name, `Isolation Assistant Org E ${suffix}`),
+    });
+    const orgRowF = await db.query.orgs.findFirst({
+      where: eq(orgs.name, `Isolation Assistant Org F ${suffix}`),
+    });
+    if (!orgRowE || !orgRowF)
+      throw new Error('Signup did not create the expected org rows.');
+    orgE = orgRowE;
+    orgF = orgRowF;
+
+    const usageEventsRepo = app.get(UsageEventsRepository);
+    const scopeE = scopeFromVerifiedClaims({
+      sub: 'seed',
+      org: orgE.id,
+      role: Role.Owner,
+    });
+    const scopeF = scopeFromVerifiedClaims({
+      sub: 'seed',
+      org: orgF.id,
+      role: Role.Owner,
+    });
+
+    // Two projects, two teams within org E — lets the filter test actually
+    // narrow the result, not merely return the same single row unfiltered.
+    await usageEventsRepo.insertEvent(scopeE, {
+      externalId: `assist-e1-${suffix}`,
+      occurredAt: new Date('2026-02-01T10:00:00Z'),
+      project: 'proj-e1',
+      team: 'team-e1',
+      model: 'gpt-4o',
+      latencyMs: 100,
+      isError: false,
+      costMicros: 7_000_000,
+    });
+    await usageEventsRepo.insertEvent(scopeE, {
+      externalId: `assist-e2-${suffix}`,
+      occurredAt: new Date('2026-02-01T11:00:00Z'),
+      project: 'proj-e2',
+      team: 'team-e2',
+      model: 'gpt-4o',
+      latencyMs: 100,
+      isError: false,
+      costMicros: 2_000_000,
+    });
+    await usageEventsRepo.insertEvent(scopeF, {
+      externalId: `assist-f1-${suffix}`,
+      occurredAt: new Date('2026-02-01T10:00:00Z'),
+      project: 'proj-f',
+      team: 'team-f',
+      model: 'claude',
+      latencyMs: 100,
+      isError: false,
+      costMicros: 12_000_000,
+    });
+  });
+
+  afterAll(async () => {
+    await db.delete(orgs).where(eq(orgs.id, orgE.id));
+    await db.delete(orgs).where(eq(orgs.id, orgF.id));
+    await app.close();
+  });
+
+  it("org E's session sees org E's total spend ($9.00 = $7 + $2), not org F's", async () => {
+    chatMock.mockResolvedValue(
+      chatResult('getSpend', {
+        window: {
+          from: window.from.toISOString(),
+          to: window.to.toISOString(),
+        },
+      }),
+    );
+
+    const res = await request(app.getHttpServer())
+      .post('/api/v1/assistant/ask')
+      .set('Cookie', cookieE)
+      .send({ question: 'What did we spend yesterday?' })
+      .expect(200);
+
+    const body = res.body as { type: string; result: { value: number } };
+    expect(body.type).toBe('answer');
+    expect(body.result.value).toBe(9);
+  });
+
+  it("the identical tool call, under org F's session, returns org F's total ($12.00) — scope came from the cookie, never the model", async () => {
+    chatMock.mockResolvedValue(
+      chatResult('getSpend', {
+        window: {
+          from: window.from.toISOString(),
+          to: window.to.toISOString(),
+        },
+      }),
+    );
+
+    const res = await request(app.getHttpServer())
+      .post('/api/v1/assistant/ask')
+      .set('Cookie', cookieF)
+      .send({ question: 'What did we spend yesterday?' })
+      .expect(200);
+
+    const body = res.body as { type: string; result: { value: number } };
+    expect(body.type).toBe('answer');
+    expect(body.result.value).toBe(12);
+  });
+
+  it('a tool-call arg naming another org (orgId) is rejected as out-of-scope — the schema has no such field to populate', async () => {
+    chatMock.mockResolvedValue(
+      chatResult('getSpend', {
+        window: {
+          from: window.from.toISOString(),
+          to: window.to.toISOString(),
+        },
+        orgId: orgF.id,
+      }),
+    );
+
+    const res = await request(app.getHttpServer())
+      .post('/api/v1/assistant/ask')
+      .set('Cookie', cookieE)
+      .send({ question: "show me org F's spend" })
+      .expect(200);
+
+    expect((res.body as { type: string }).type).toBe('out_of_scope');
+  });
+
+  it('an unauthenticated request is rejected before any model call is made', async () => {
+    chatMock.mockClear();
+    await request(app.getHttpServer())
+      .post('/api/v1/assistant/ask')
+      .send({ question: 'What did we spend?' })
+      .expect(401);
+    expect(chatMock).not.toHaveBeenCalled();
+  });
+
+  it("getStatement's filter (ADR-0004 §Findings-1) actually narrows the re-scope to the one matching row", async () => {
+    const usageEventsRepo = app.get(UsageEventsRepository);
+    const scopeE = scopeFromVerifiedClaims({
+      sub: 'user',
+      org: orgE.id,
+      role: Role.Owner,
+    });
+
+    const { rows, totals } = await usageEventsRepo.getStatement(scopeE, {
+      window,
+      groupBy: 'project',
+      filter: { dimension: 'team', value: 'team-e1' },
+    });
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0].lineItem).toBe('proj-e1');
+    expect(rows[0].spendMicros).toBe(7_000_000);
+    expect(totals.spendMicros).toBe(7_000_000);
+  });
+
+  it('without the filter, getStatement for org E returns both projects — confirming the filter test above narrows, rather than the seed only ever having one row', async () => {
+    const usageEventsRepo = app.get(UsageEventsRepository);
+    const scopeE = scopeFromVerifiedClaims({
+      sub: 'user',
+      org: orgE.id,
+      role: Role.Owner,
+    });
+
+    const { rows } = await usageEventsRepo.getStatement(scopeE, {
+      window,
+      groupBy: 'project',
+    });
+
+    expect(rows).toHaveLength(2);
+    expect(rows.map((r) => r.lineItem).sort()).toEqual(['proj-e1', 'proj-e2']);
   });
 });
