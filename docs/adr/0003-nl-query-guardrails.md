@@ -1,9 +1,9 @@
-# ADR — NL-query assistant guardrails: allow-listed query schema + per-query cost ceiling
+# ADR-0003: NL-query assistant guardrails: allow-listed query schema + per-query cost ceiling
 
-- ADR number: _(slot into Cogent-AI's existing sequence — likely after the two-database and hand-rolled-auth ADRs)_
 - Status: Accepted
 - Date: 2026-07-05
 - Scope: MVP (interview-critical). This is the differentiating feature; full rigor applies.
+- **Numbering note:** Deferred by ADR-0001 and ADR-0002 (each of which said this ADR becomes `0003` on approval) until the session that finally binds it — ADR-0004 (`0004-nl-query-assistant-function-calling-intent-and-cost-cap.md`), renamed here on that ADR's approval.
 
 ## Context
 
