@@ -66,3 +66,83 @@ export function logout() {
 export function getSession() {
   return request<SessionResponse>("/auth/session");
 }
+
+/**
+ * Mirrors `apps/api/src/usage/types.ts` — duplicated here rather than
+ * imported because there is no shared package between `apps/api` and
+ * `apps/web` in this workspace (same pattern as `SessionResponse` above,
+ * which doesn't import the API's own session-response shape either).
+ */
+export type Dimension = "project" | "team" | "model" | "time";
+export type Metric = "spend" | "latency" | "requests" | "errors";
+export type GroupingDimension = Exclude<Dimension, "time">;
+
+export interface TimeWindow {
+  from: Date;
+  to: Date;
+}
+
+export interface MetricFilter {
+  dimension: GroupingDimension;
+  value: string;
+}
+
+export interface StatementRow {
+  lineItem: string;
+  requests: number;
+  p95Ms: number;
+  errorRatePct: number;
+  spendMicros: number;
+}
+
+export interface StatementResponse {
+  rows: StatementRow[];
+  totals: StatementRow;
+}
+
+export type MetricResult =
+  | { intent: "point"; metric: Metric; value: number; unit: string }
+  | { intent: "slice"; metric: Metric; groupBy: Dimension; rows: { key: string; value: number }[] };
+
+function windowParams(window: TimeWindow): URLSearchParams {
+  return new URLSearchParams({
+    from: window.from.toISOString(),
+    to: window.to.toISOString(),
+  });
+}
+
+function appendFilter(params: URLSearchParams, filter?: MetricFilter): void {
+  if (!filter) return;
+  params.set("filterDimension", filter.dimension);
+  params.set("filterValue", filter.value);
+}
+
+export function getStatement(args: {
+  window: TimeWindow;
+  groupBy: GroupingDimension;
+  filter?: MetricFilter;
+}) {
+  const params = windowParams(args.window);
+  params.set("groupBy", args.groupBy);
+  appendFilter(params, args.filter);
+  return request<StatementResponse>(`/v1/usage/statement?${params.toString()}`);
+}
+
+/**
+ * `getSpend` (ADR-0002 §3b), over HTTP. Only `spend` is wired as a
+ * single-metric route this session — the Statement's other three metrics
+ * (latency/requests/errors) are already served in aggregate by
+ * `getStatement`'s `totals` (the header hero swap needs nothing else); a
+ * per-metric point/slice route for them is the assistant's job once its
+ * real backend wiring lands (spec §3), not this screen's.
+ */
+export function getSpendMetric(args: {
+  window: TimeWindow;
+  groupBy?: Dimension;
+  filter?: MetricFilter;
+}) {
+  const params = windowParams(args.window);
+  if (args.groupBy) params.set("groupBy", args.groupBy);
+  appendFilter(params, args.filter);
+  return request<MetricResult>(`/v1/usage/spend?${params.toString()}`);
+}
