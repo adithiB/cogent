@@ -6,6 +6,7 @@ import { DbModule } from './db/db.module';
 import { AuthModule } from './auth/auth.module';
 import { IngestModule } from './ingest/ingest.module';
 import { AssistantModule } from './assistant/assistant.module';
+import { UsageModule } from './usage/usage.module';
 
 @Module({
   imports: [
@@ -14,6 +15,7 @@ import { AssistantModule } from './assistant/assistant.module';
     AuthModule,
     IngestModule,
     AssistantModule,
+    UsageModule,
   ],
   controllers: [AppController],
   providers: [AppService],
