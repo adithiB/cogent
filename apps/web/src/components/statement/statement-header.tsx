@@ -2,6 +2,7 @@ import { BudgetRule } from "./budget-rule";
 import { HeaderSparkline } from "./header-sparkline";
 import { heroValueFor } from "@/lib/format";
 import type { Metric, MetricResult, StatementRow } from "@/lib/api-client";
+import type { BudgetAlertWithStatus } from "@/lib/hooks/use-budget-alerts";
 
 /**
  * spec §2.2 layout: 30px mono total + sparkline; right = BudgetRule (Spend
@@ -17,10 +18,12 @@ export function StatementHeader({
   measure,
   totals,
   trend,
+  budgetAlert,
 }: {
   measure: Metric;
   totals: StatementRow;
   trend: MetricResult | undefined;
+  budgetAlert: BudgetAlertWithStatus | undefined;
 }) {
   return (
     <div className="flex items-end justify-between gap-6 border-b border-border pb-6">
@@ -41,7 +44,7 @@ export function StatementHeader({
 
       {measure === "spend" && (
         <div className="shrink-0 pb-1">
-          <BudgetRule />
+          <BudgetRule alert={budgetAlert} />
         </div>
       )}
     </div>

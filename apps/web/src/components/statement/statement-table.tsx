@@ -1,12 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronRight } from "lucide-react";
+import { AlertTriangle, ChevronRight } from "lucide-react";
 
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { METRIC_LABEL, formatCount, formatMs, formatPercent, formatUsd, metricCellValue } from "@/lib/format";
+import { formatConsumedPct, STATUS_INK_CLASS, STATUS_TINT_CLASS } from "@/lib/threshold";
 import { cn } from "@/lib/utils";
-import type { Metric, StatementRow } from "@/lib/api-client";
+import type { GroupingDimension, Metric, StatementRow } from "@/lib/api-client";
+import type { BudgetAlertWithStatus } from "@/lib/hooks/use-budget-alerts";
 
 /**
  * spec §2.2 responsive rule, expressed as one visibility function per
@@ -21,6 +23,24 @@ function columnVisibility(column: Metric, measure: Metric): string {
 }
 
 const COLUMNS: Metric[] = ["requests", "latency", "errors", "spend"];
+
+/**
+ * spec §1.7: a group row is marked only when an alert exists for *this exact
+ * grouping dimension and value* and has actually been "reached" (warn/danger
+ * — the on-track state marks nothing). "MVP ships one alert, so at most one
+ * scope is ever marked" falls out of this naturally rather than being
+ * special-cased: change the Grouping pill away from that alert's dimension
+ * and no row matches, by construction.
+ */
+function matchingReachedAlert(
+  alerts: BudgetAlertWithStatus[],
+  grouping: GroupingDimension,
+  lineItem: string,
+): BudgetAlertWithStatus | undefined {
+  return alerts.find(
+    (a) => a.scope.dimension === grouping && a.scope.value === lineItem && a.reading.status !== "ok",
+  );
+}
 
 function cellText(column: Metric, row: StatementRow): string {
   switch (column) {
@@ -39,24 +59,33 @@ function StatementTableRow({
   row,
   measure,
   isTotal = false,
+  budgetAlert,
 }: {
   row: StatementRow;
   measure: Metric;
   isTotal?: boolean;
+  budgetAlert?: BudgetAlertWithStatus;
 }) {
   const [expanded, setExpanded] = useState(false);
   const otherColumns = COLUMNS.filter((c) => c !== measure);
   const detailId = `statement-row-detail-${row.lineItem}`;
 
+  const inkClass = budgetAlert ? STATUS_INK_CLASS[budgetAlert.reading.status] : undefined;
+  const rowLabel = budgetAlert
+    ? `${row.lineItem}, ${budgetAlert.reading.status === "danger" ? "over" : "near"} budget alert, ` +
+      `${formatConsumedPct(budgetAlert.reading.consumedPct)} of ${formatUsd(budgetAlert.capMicros)} cap`
+    : isTotal
+      ? `Total: ${METRIC_LABEL[measure]} ${metricCellValue(measure, row)}`
+      : `${row.lineItem}: ${METRIC_LABEL[measure]} ${metricCellValue(measure, row)}`;
+
   return (
     <>
       <TableRow
-        className={isTotal ? "border-t-2 border-t-border-strong font-medium" : undefined}
-        aria-label={
-          isTotal
-            ? `Total: ${METRIC_LABEL[measure]} ${metricCellValue(measure, row)}`
-            : `${row.lineItem}: ${METRIC_LABEL[measure]} ${metricCellValue(measure, row)}`
-        }
+        className={cn(
+          isTotal && "border-t-2 border-t-border-strong font-medium",
+          budgetAlert && STATUS_TINT_CLASS[budgetAlert.reading.status],
+        )}
+        aria-label={rowLabel}
       >
         <TableCell className="font-mono text-text">
           <span className="flex items-center gap-1.5">
@@ -72,7 +101,21 @@ function StatementTableRow({
                 <ChevronRight size={14} className={cn("transition-transform", expanded && "rotate-90")} />
               </button>
             )}
+            {budgetAlert && (
+              <AlertTriangle size={14} className={cn("shrink-0", inkClass)} aria-hidden="true" />
+            )}
             <span className="font-sans">{row.lineItem}</span>
+            {budgetAlert && (
+              <span
+                className={cn(
+                  "rounded-sm px-1.5 py-0.5 font-mono text-meta",
+                  STATUS_TINT_CLASS[budgetAlert.reading.status],
+                  inkClass,
+                )}
+              >
+                {formatConsumedPct(budgetAlert.reading.consumedPct)} of {formatUsd(budgetAlert.capMicros)} cap
+              </span>
+            )}
           </span>
         </TableCell>
         {COLUMNS.map((column) => (
@@ -82,8 +125,9 @@ function StatementTableRow({
               "text-right font-mono tabular-nums",
               columnVisibility(column, measure),
               column === measure && "font-medium",
-              column === measure && column === "spend" && "text-accent",
+              column === measure && column === "spend" && !budgetAlert && "text-accent",
               column === measure && column !== "spend" && "text-text",
+              column === "spend" && budgetAlert && inkClass,
             )}
           >
             {cellText(column, row)}
@@ -113,10 +157,14 @@ export function StatementTable({
   rows,
   totals,
   measure,
+  grouping,
+  alerts,
 }: {
   rows: StatementRow[];
   totals: StatementRow;
   measure: Metric;
+  grouping: GroupingDimension;
+  alerts: BudgetAlertWithStatus[];
 }) {
   return (
     <Table>
@@ -136,7 +184,12 @@ export function StatementTable({
       </TableHeader>
       <TableBody>
         {rows.map((row) => (
-          <StatementTableRow key={row.lineItem} row={row} measure={measure} />
+          <StatementTableRow
+            key={row.lineItem}
+            row={row}
+            measure={measure}
+            budgetAlert={matchingReachedAlert(alerts, grouping, row.lineItem)}
+          />
         ))}
         <StatementTableRow row={{ ...totals, lineItem: "Total" }} measure={measure} isTotal />
       </TableBody>

@@ -29,6 +29,7 @@ import { getSpendMetric, type GroupingDimension, type Metric, type MetricFilter 
 import { useStatement } from "@/lib/hooks/use-statement";
 import { useSpendTrend } from "@/lib/hooks/use-spend-trend";
 import { useSession } from "@/lib/hooks/use-session";
+import { useBudgetAlertsWithStatus } from "@/lib/hooks/use-budget-alerts";
 import { DEFAULT_PERIOD, PERIOD_OPTIONS, periodToWindow, type PeriodId } from "@/lib/period";
 
 /**
@@ -54,6 +55,15 @@ export function StatementScreen() {
 
   const statement = useStatement({ window, groupBy: grouping, filter: viewingFilter });
   const trend = useSpendTrend(window);
+  const budgetAlerts = useBudgetAlertsWithStatus();
+
+  // BudgetRule §1.7: the alert matching whatever scope is currently being
+  // viewed — org total by default, or the active re-scope filter.
+  const viewBudgetAlert = budgetAlerts.data?.find((a) =>
+    viewingFilter
+      ? a.scope.dimension === viewingFilter.dimension && a.scope.value === viewingFilter.value
+      : a.scope.dimension === "total",
+  );
 
   function pushAnswer(entry: AnswerLogEntry) {
     setAnswerLog((log) => [entry, ...log].slice(0, MAX_ANSWER_LOG_ENTRIES));
@@ -159,8 +169,19 @@ export function StatementScreen() {
         <StatementEmptyState />
       ) : (
         <>
-          <StatementHeader measure={measure} totals={statement.data.totals} trend={trend.data} />
-          <StatementTable rows={statement.data.rows} totals={statement.data.totals} measure={measure} />
+          <StatementHeader
+            measure={measure}
+            totals={statement.data.totals}
+            trend={trend.data}
+            budgetAlert={viewBudgetAlert}
+          />
+          <StatementTable
+            rows={statement.data.rows}
+            totals={statement.data.totals}
+            measure={measure}
+            grouping={grouping}
+            alerts={budgetAlerts.data ?? []}
+          />
         </>
       )}
     </div>
