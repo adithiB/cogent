@@ -4,11 +4,8 @@ import type { MetricFilter } from "@/lib/api-client";
 
 /**
  * spec §1.8/§2.2: only rendered when the statement has been re-scoped by a
- * `slice` answer. This session's AskBar is visual-only (§3), so the
- * *trigger* is the stub dispatch's canned slice example — but the re-scope
- * itself calls the real `getStatement` with this filter (Task #8), so the
- * chip reflects a real, currently-active query parameter, not a decorative
- * label.
+ * real `slice` answer from the assistant (ADR-0004) — the chip reflects a
+ * real, currently-active query parameter, not a decorative label.
  */
 export function ViewingFilterChip({
   filter,

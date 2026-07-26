@@ -9,11 +9,11 @@ import { AlertTriangle } from "lucide-react";
  * genuinely-paused, zero-spend outcome (amendment §3d/§5), not an error.
  */
 export function CostCapCard({
-  estimatedTokens,
-  maxTokens,
+  estimatedQuestionTokens,
+  maxQuestionTokens,
 }: {
-  estimatedTokens: number;
-  maxTokens: number;
+  estimatedQuestionTokens: number;
+  maxQuestionTokens: number;
 }) {
   return (
     <div role="status" className="rounded-lg bg-danger-tint p-3">
@@ -22,8 +22,8 @@ export function CostCapCard({
         <div>
           <p className="text-body text-danger-ink">Query paused — over the per-query compute budget.</p>
           <p className="mt-1 text-secondary text-danger-ink">
-            ~{estimatedTokens} tok estimated, {maxTokens} tok budget. Try a shorter, more specific
-            question.
+            ~{estimatedQuestionTokens} tok estimated, {maxQuestionTokens} tok budget. Try a shorter,
+            more specific question.
           </p>
         </div>
       </div>

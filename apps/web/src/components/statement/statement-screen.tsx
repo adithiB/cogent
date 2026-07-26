@@ -16,16 +16,8 @@ import { StatementHeader } from "./statement-header";
 import { StatementSkeleton } from "./statement-skeleton";
 import { StatementTable } from "./statement-table";
 import { ViewingFilterChip } from "./viewing-filter-chip";
-import {
-  MAX_ANSWER_LOG_ENTRIES,
-  MAX_QUESTION_TOKENS,
-  OUT_OF_SCOPE_REASON,
-  REPHRASE_CHIPS,
-  classifyQuestion,
-  estimateTokens,
-  type AnswerLogEntry,
-} from "@/lib/assistant-stub";
-import { getSpendMetric, type GroupingDimension, type Metric, type MetricFilter } from "@/lib/api-client";
+import { MAX_ANSWER_LOG_ENTRIES, type AnswerLogEntry } from "@/lib/assistant";
+import { askAssistant, type Dimension, type GroupingDimension, type Metric, type MetricFilter } from "@/lib/api-client";
 import { useStatement } from "@/lib/hooks/use-statement";
 import { useSpendTrend } from "@/lib/hooks/use-spend-trend";
 import { useSession } from "@/lib/hooks/use-session";
@@ -33,9 +25,10 @@ import { useBudgetAlertsWithStatus } from "@/lib/hooks/use-budget-alerts";
 import { DEFAULT_PERIOD, PERIOD_OPTIONS, periodToWindow, type PeriodId } from "@/lib/period";
 
 /**
- * cogent-ui-implementation-spec.md §2.2 — the Statement screen, assembled
- * from the real, independently-built pieces above. AskBar's dispatch below
- * is the one deliberately stubbed piece (§3); everything it calls is real.
+ * cogent-ui-implementation-spec.md §2.2 — the Statement screen. AskBar's
+ * dispatch is real as of this session: `askAssistant` posts to the real
+ * `/v1/assistant/ask` (ADR-0004), and `submitQuestion` routes on whatever
+ * envelope the backend actually returns.
  */
 export function StatementScreen() {
   const queryClient = useQueryClient();
@@ -73,67 +66,68 @@ export function StatementScreen() {
     setQuestion(text);
   }
 
-  async function handleSubmit() {
-    const q = question.trim();
+  function isGroupingDimension(d: Dimension): d is GroupingDimension {
+    return d !== "time";
+  }
+
+  /**
+   * ADR-0004 amendment §3e: the client's live token estimate (AskBar) is
+   * legibility only, never a submit gate — always POST and let the server's
+   * real admission gate decide `budget_exceeded`, so that state is never
+   * fabricated client-side.
+   */
+  async function submitQuestion(q: string) {
     const id = crypto.randomUUID();
-    const estimatedTokens = estimateTokens(q);
-
-    if (estimatedTokens > MAX_QUESTION_TOKENS) {
-      pushAnswer({ id, type: "budget_exceeded", question: q, estimatedTokens, maxTokens: MAX_QUESTION_TOKENS });
-      setQuestion("");
-      return;
-    }
-
-    const questionClass = classifyQuestion(q);
-    if (questionClass === "out_of_scope") {
-      pushAnswer({ id, type: "out_of_scope", question: q, reason: OUT_OF_SCOPE_REASON, rephraseChips: REPHRASE_CHIPS });
-      setQuestion("");
-      return;
-    }
-
     setSubmitting(true);
     try {
-      if (questionClass === "slice") {
-        const filter: MetricFilter = { dimension: "team", value: "checkout-service" };
-        const result = await getSpendMetric({ window, groupBy: "model", filter });
-        const summary =
-          result.intent === "slice"
-            ? result.rows.map((r) => `${r.key} $${r.value.toFixed(2)}`).join(", ") || "no matching rows"
-            : "no matching rows";
-        pushAnswer({
-          id,
-          type: "answer",
-          question: q,
-          mapped: `getSpend · groupBy=model, filter=team:checkout-service · ${periodLabel}`,
-          answerText: `Spend by model for team "checkout-service", ${periodLabel}: ${summary}.`,
-          estimatedTokens,
-        });
-        setGrouping("model");
-        setViewingFilter(filter);
+      const envelope = await askAssistant(q);
+
+      // spec §1.8: `slice` re-scopes the statement to the mapped grouping +
+      // filter; `point` leaves it unchanged (the AnswerBlock alone answers).
+      // ADR-0004 Finding 1's `filter` fix on `getStatement` is what makes a
+      // *filtered* slice re-scope correctly, not just an unfiltered one.
+      if (envelope.type === "answer" && envelope.result.intent === "slice") {
+        const groupBy = envelope.result.groupBy;
+        if (isGroupingDimension(groupBy)) {
+          setGrouping(groupBy);
+          setViewingFilter(envelope.mapped.args.filter);
+          pushAnswer({ id, question: q, ...envelope });
+        } else {
+          // groupBy 'time' — the Statement's GroupingPill has no time
+          // option (spec §2.2's allow-list is project/team/model only), so
+          // there is no table to re-scope into. Leaving grouping/filter
+          // state untouched here would silently strand whatever the table
+          // already showed (including a stale filter from an earlier,
+          // unrelated query) next to an AnswerBlock about something else
+          // entirely — `unscoped` makes AnswerBlock say so explicitly
+          // instead of implying a correspondence that isn't there.
+          pushAnswer({ id, question: q, ...envelope, unscoped: true });
+        }
       } else {
-        const result = await getSpendMetric({ window });
-        const value = result.intent === "point" ? result.value : 0;
-        pushAnswer({
-          id,
-          type: "answer",
-          question: q,
-          mapped: `getSpend · ${periodLabel}`,
-          answerText: `Spend, ${periodLabel}: $${value.toFixed(2)}.`,
-          estimatedTokens,
-        });
+        pushAnswer({ id, question: q, ...envelope });
       }
-    } catch {
+    } catch (err) {
+      console.error("[assistant] ask failed:", err);
       pushAnswer({
         id,
-        type: "out_of_scope",
         question: q,
+        type: "out_of_scope",
         reason: "Couldn't reach the query service. Try again.",
-        rephraseChips: REPHRASE_CHIPS,
+        rephraseChips: [
+          "What did we spend this month?",
+          "Show error rate by model",
+          "Which team has the highest spend?",
+        ],
       });
     } finally {
       setSubmitting(false);
-      setQuestion("");
     }
+  }
+
+  async function handleSubmit() {
+    const q = question.trim();
+    setQuestion("");
+    await submitQuestion(q);
   }
 
   function clearFilter() {
@@ -149,7 +143,7 @@ export function StatementScreen() {
       <div className="space-y-3">
         <AskBar question={question} onQuestionChange={setQuestion} onSubmit={handleSubmit} submitting={submitting} />
         <ScopeHint onExample={applyExample} />
-        <AnswerLog entries={answerLog} onRephrase={applyExample} />
+        <AnswerLog entries={answerLog} thinking={submitting} onRephrase={applyExample} />
       </div>
 
       <div className="flex flex-wrap items-center gap-2">

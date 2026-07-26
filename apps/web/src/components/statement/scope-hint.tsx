@@ -1,4 +1,4 @@
-import { EXAMPLE_QUESTION } from "@/lib/assistant-stub";
+import { EXAMPLE_QUESTION } from "@/lib/assistant";
 
 /** spec §2.2: "Read-only · answers are drawn from this account's statement
  * below" + one example link. Also §2.2 A11y: "ScopeHint states read-only." */

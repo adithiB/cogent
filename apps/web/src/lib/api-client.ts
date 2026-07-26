@@ -149,6 +149,64 @@ export function getSpendMetric(args: {
 }
 
 /**
+ * Mirrors `apps/api/src/assistant/types.ts` and `tools.ts` (ADR-0004 + its
+ * 2026-07-23/24 amendment) — same "duplicated, not imported" convention as
+ * every other type in this file. `args.window` carries ISO date-time
+ * strings, not `Date` — this is JSON straight off the wire, not the
+ * server-side `MetricArgs` (whose `window` is real `Date`).
+ */
+export type MetricToolName = "getSpend" | "getRequestVolume" | "getLatency" | "getErrorRate";
+
+export interface AssistantMetricArgs {
+  window: { from: string; to: string };
+  groupBy?: Dimension;
+  filter?: MetricFilter;
+}
+
+export interface MappedTo {
+  function: MetricToolName;
+  args: AssistantMetricArgs;
+}
+
+/**
+ * The real response envelope (`AssistantAnswerEnvelope`). No `costUsd`/
+ * `capUsd` field anywhere — the amendment removed the dollar framing because
+ * Ollama is local and has no per-token cost; `usage` reports real measured
+ * tokens + wall-time instead, and the blocked variant reports the token
+ * budget that refused the query, never a dollar figure.
+ */
+export type AssistantAnswerEnvelope =
+  | {
+      type: "answer";
+      result: MetricResult;
+      mapped: MappedTo;
+      answerText: string;
+      usage: { promptTokens: number; completionTokens: number; durationMs: number };
+    }
+  | {
+      type: "out_of_scope";
+      reason: string;
+      rephraseChips: string[];
+    }
+  | {
+      type: "budget_exceeded";
+      estimatedQuestionTokens: number;
+      maxQuestionTokens: number;
+    };
+
+/**
+ * `POST /v1/assistant/ask` (ADR-0004). A real Ollama call — several seconds
+ * of warm-state latency, more on a cold model load — not a snappy API round
+ * trip; callers must reflect that honestly in their loading state.
+ */
+export function askAssistant(question: string) {
+  return request<AssistantAnswerEnvelope>("/v1/assistant/ask", {
+    method: "POST",
+    body: JSON.stringify({ question }),
+  });
+}
+
+/**
  * cogent-ui-implementation-spec.md §2.4. Mirrors `apps/api/src/budgets/types.ts`
  * — duplicated here rather than shared, same reasoning as every other type
  * in this file (no shared package between `apps/api` and `apps/web`).
