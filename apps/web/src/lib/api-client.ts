@@ -42,6 +42,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 export interface SessionResponse {
   authenticated: true;
   org: { name: string };
+  user: { email: string };
   role: "owner" | "member";
 }
 
@@ -145,4 +146,68 @@ export function getSpendMetric(args: {
   if (args.groupBy) params.set("groupBy", args.groupBy);
   appendFilter(params, args.filter);
   return request<MetricResult>(`/v1/usage/spend?${params.toString()}`);
+}
+
+/**
+ * cogent-ui-implementation-spec.md §2.4. Mirrors `apps/api/src/budgets/types.ts`
+ * — duplicated here rather than shared, same reasoning as every other type
+ * in this file (no shared package between `apps/api` and `apps/web`).
+ */
+export type BudgetScopeDimension = "total" | "project" | "team" | "model";
+export type BudgetThresholdType = "amount" | "percent";
+
+export interface BudgetScope {
+  dimension: BudgetScopeDimension;
+  value: string | null;
+}
+
+export interface BudgetScopeOption {
+  dimension: BudgetScopeDimension;
+  value: string | null;
+}
+
+export interface BudgetAlert {
+  id: string;
+  scope: BudgetScope;
+  thresholdType: BudgetThresholdType;
+  thresholdAmountMicros: number | null;
+  thresholdPercent: number | null;
+  budgetAmountMicros: number | null;
+  capMicros: number;
+  notifyEmail: string;
+  createdAt: string;
+}
+
+export type CreateBudgetAlertInput =
+  | {
+      scopeDimension: BudgetScopeDimension;
+      scopeValue?: string;
+      thresholdType: "amount";
+      thresholdAmount: number;
+    }
+  | {
+      scopeDimension: BudgetScopeDimension;
+      scopeValue?: string;
+      thresholdType: "percent";
+      thresholdPercent: number;
+      budgetAmount: number;
+    };
+
+export function listBudgetAlerts() {
+  return request<BudgetAlert[]>("/v1/budget-alerts");
+}
+
+export function getBudgetScopeOptions() {
+  return request<BudgetScopeOption[]>("/v1/budget-alerts/scope-options");
+}
+
+export function createBudgetAlert(input: CreateBudgetAlertInput) {
+  return request<BudgetAlert>("/v1/budget-alerts", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function removeBudgetAlert(id: string) {
+  return request<void>(`/v1/budget-alerts/${id}`, { method: "DELETE" });
 }
