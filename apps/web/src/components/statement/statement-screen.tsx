@@ -74,7 +74,9 @@ export function StatementScreen() {
    * ADR-0004 amendment §3e: the client's live token estimate (AskBar) is
    * legibility only, never a submit gate — always POST and let the server's
    * real admission gate decide `budget_exceeded`, so that state is never
-   * fabricated client-side.
+   * fabricated client-side. `question` is passed explicitly (not read from
+   * state) so Retry can resubmit an entry without depending on current
+   * input state.
    */
   async function submitQuestion(q: string) {
     const id = crypto.randomUUID();
@@ -108,17 +110,7 @@ export function StatementScreen() {
       }
     } catch (err) {
       console.error("[assistant] ask failed:", err);
-      pushAnswer({
-        id,
-        question: q,
-        type: "out_of_scope",
-        reason: "Couldn't reach the query service. Try again.",
-        rephraseChips: [
-          "What did we spend this month?",
-          "Show error rate by model",
-          "Which team has the highest spend?",
-        ],
-      });
+      pushAnswer({ id, question: q, type: "error" });
     } finally {
       setSubmitting(false);
     }
@@ -143,7 +135,7 @@ export function StatementScreen() {
       <div className="space-y-3">
         <AskBar question={question} onQuestionChange={setQuestion} onSubmit={handleSubmit} submitting={submitting} />
         <ScopeHint onExample={applyExample} />
-        <AnswerLog entries={answerLog} thinking={submitting} onRephrase={applyExample} />
+        <AnswerLog entries={answerLog} thinking={submitting} onRephrase={applyExample} onRetry={submitQuestion} />
       </div>
 
       <div className="flex flex-wrap items-center gap-2">

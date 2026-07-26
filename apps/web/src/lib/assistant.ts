@@ -29,12 +29,17 @@ export const MAX_ANSWER_LOG_ENTRIES = 4;
 
 /**
  * AnswerLog's entry shape — the real envelope plus the question that
- * produced it (for `crypto.randomUUID()`-keyed list rendering) plus
- * `unscoped`, set when a `slice` answer groups by `time` — a dimension the
- * Statement's GroupingPill has no option for (§2.2's allow-list is
- * project/team/model only), so there's no table to re-scope into.
+ * produced it (for `crypto.randomUUID()`-keyed list rendering), plus one
+ * client-only variant: `error`. The backend's `AssistantAnswerEnvelope` has
+ * no error variant by design — a 503/network failure throws before any
+ * envelope is returned — so this is a distinct state per spec §2.3 ("backend
+ * error (distinct … role="alert")"), never rendered via OutOfScopeCard
+ * (`role="status"`), which is reserved for the backend's own out-of-scope
+ * judgment.
  */
-export type AnswerLogEntry = { id: string; question: string; unscoped?: boolean } & AssistantAnswerEnvelope;
+export type AnswerLogEntry =
+  | ({ id: string; question: string; unscoped?: boolean } & AssistantAnswerEnvelope)
+  | { id: string; question: string; type: "error" };
 
 const DIMENSION_LABEL: Record<string, string> = {
   project: "project",

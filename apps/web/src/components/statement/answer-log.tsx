@@ -1,4 +1,5 @@
 import { AnswerBlock } from "./answer-block";
+import { AssistantErrorCard } from "./assistant-error-card";
 import { CostCapCard } from "./cost-cap-card";
 import { OutOfScopeCard } from "./out-of-scope-card";
 import { ThinkingIndicator } from "./thinking-indicator";
@@ -14,10 +15,12 @@ export function AnswerLog({
   entries,
   thinking,
   onRephrase,
+  onRetry,
 }: {
   entries: AnswerLogEntry[];
   thinking: boolean;
   onRephrase: (text: string) => void;
+  onRetry: (question: string) => void;
 }) {
   if (entries.length === 0 && !thinking) return null;
 
@@ -53,6 +56,8 @@ export function AnswerLog({
                 maxQuestionTokens={entry.maxQuestionTokens}
               />
             );
+          case "error":
+            return <AssistantErrorCard key={entry.id} onRetry={() => onRetry(entry.question)} />;
         }
       })}
     </div>
