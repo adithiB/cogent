@@ -10,6 +10,7 @@ import { MembershipsRepository } from './repositories/memberships.repository';
 import { RefreshTokensRepository } from './repositories/refresh-tokens.repository';
 import { ApiKeysRepository } from './repositories/api-keys.repository';
 import { UsageEventsRepository } from './repositories/usage-events.repository';
+import { BudgetAlertsRepository } from './repositories/budget-alerts.repository';
 
 const repositories = [
   OrgsRepository,
@@ -18,6 +19,7 @@ const repositories = [
   RefreshTokensRepository,
   ApiKeysRepository,
   UsageEventsRepository,
+  BudgetAlertsRepository,
 ];
 
 @Global()

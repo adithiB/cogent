@@ -7,6 +7,7 @@ import { AuthModule } from './auth/auth.module';
 import { IngestModule } from './ingest/ingest.module';
 import { AssistantModule } from './assistant/assistant.module';
 import { UsageModule } from './usage/usage.module';
+import { BudgetsModule } from './budgets/budgets.module';
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { UsageModule } from './usage/usage.module';
     IngestModule,
     AssistantModule,
     UsageModule,
+    BudgetsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

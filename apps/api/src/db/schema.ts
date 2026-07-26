@@ -9,6 +9,7 @@ import {
   integer,
   bigint,
   boolean,
+  numeric,
 } from 'drizzle-orm/pg-core';
 
 export const roleEnum = pgEnum('role', ['owner', 'member']);
@@ -138,6 +139,73 @@ export const usageEvents = pgTable(
       table.externalId,
     ),
     index('usage_events_org_occurred_idx').on(table.orgId, table.occurredAt),
+  ],
+);
+
+export const budgetScopeDimensionEnum = pgEnum('budget_scope_dimension', [
+  'total',
+  'project',
+  'team',
+  'model',
+]);
+export const budgetThresholdTypeEnum = pgEnum('budget_threshold_type', [
+  'amount',
+  'percent',
+]);
+
+/**
+ * cogent-ui-implementation-spec.md §2.4. One row per alert; `orgId` is the
+ * sole tenant-scope column, same discipline as every other table here.
+ *
+ * `scopeValue` is `''` (never `NULL`) when `scopeDimension = 'total'` — a
+ * deliberate choice over a nullable column, because Postgres unique indexes
+ * treat every `NULL` as distinct from every other `NULL`, which would let a
+ * client silently create more than one "total" alert per org past the
+ * `budget_alerts_org_scope_unique` constraint. A non-null sentinel keeps one
+ * index doing the whole job instead of a nullable column plus a partial index.
+ *
+ * `thresholdAmountMicros` (amount mode) and `thresholdPercent`/
+ * `budgetAmountMicros` (percent mode) are mutually exclusive per row —
+ * enforced by the DTO's `superRefine`, not a DB constraint, matching this
+ * codebase's existing pattern of enforcing cross-field shape in Zod rather
+ * than a CHECK constraint (see e.g. `metric-query.dto.ts`'s `from < to`).
+ * `budgetAmountMicros` is the one piece of schema this session's build
+ * prompt flagged as ambiguous — the spec's "% of budget" needed a budget
+ * figure to divide into that existed nowhere else in the model, and the
+ * resolution taken was the narrowest one: persist it on the alert itself,
+ * not as a standalone budget entity.
+ */
+export const budgetAlerts = pgTable(
+  'budget_alerts',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    orgId: uuid('org_id')
+      .notNull()
+      .references(() => orgs.id, { onDelete: 'cascade' }),
+    scopeDimension: budgetScopeDimensionEnum('scope_dimension').notNull(),
+    scopeValue: text('scope_value').notNull(),
+    thresholdType: budgetThresholdTypeEnum('threshold_type').notNull(),
+    thresholdAmountMicros: bigint('threshold_amount_micros', {
+      mode: 'number',
+    }),
+    thresholdPercent: numeric('threshold_percent', {
+      precision: 5,
+      scale: 2,
+      mode: 'number',
+    }),
+    budgetAmountMicros: bigint('budget_amount_micros', { mode: 'number' }),
+    notifyEmail: text('notify_email').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('budget_alerts_org_scope_unique').on(
+      table.orgId,
+      table.scopeDimension,
+      table.scopeValue,
+    ),
+    index('budget_alerts_org_idx').on(table.orgId),
   ],
 );
 

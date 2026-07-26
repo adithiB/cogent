@@ -17,6 +17,7 @@ import { signupSchema, type SignupDto } from './dto/signup.dto';
 import { loginSchema, type LoginDto } from './dto/login.dto';
 import { REFRESH_COOKIE } from './cookies';
 import { OrgsRepository } from '../db/repositories/orgs.repository';
+import { UsersRepository } from '../db/repositories/users.repository';
 
 @Controller('auth')
 export class AuthController {
@@ -24,6 +25,7 @@ export class AuthController {
     private readonly authService: AuthService,
     private readonly tokens: TokensService,
     private readonly orgs: OrgsRepository,
+    private readonly users: UsersRepository,
   ) {}
 
   @Post('signup')
@@ -44,10 +46,13 @@ export class AuthController {
   }
 
   @Post('refresh')
-  async refresh(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
-    const token = (req.cookies as Record<string, string | undefined> | undefined)?.[
-      REFRESH_COOKIE
-    ];
+  async refresh(
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const token = (
+      req.cookies as Record<string, string | undefined> | undefined
+    )?.[REFRESH_COOKIE];
     if (!token) {
       throw new UnauthorizedException('No refresh token present.');
     }
@@ -57,9 +62,9 @@ export class AuthController {
 
   @Post('logout')
   async logout(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
-    const token = (req.cookies as Record<string, string | undefined> | undefined)?.[
-      REFRESH_COOKIE
-    ];
+    const token = (
+      req.cookies as Record<string, string | undefined> | undefined
+    )?.[REFRESH_COOKIE];
     await this.tokens.endSession(res, token);
     return { authenticated: false };
   }
@@ -68,7 +73,15 @@ export class AuthController {
   @Get('session')
   async session(@Req() req: Request) {
     const { scope } = req as RequestWithScope;
-    const org = await this.orgs.getScoped(scope);
-    return { authenticated: true, org: { name: org?.name }, role: scope.role };
+    const [org, user] = await Promise.all([
+      this.orgs.getScoped(scope),
+      this.users.findById(scope.userId),
+    ]);
+    return {
+      authenticated: true,
+      org: { name: org?.name },
+      user: { email: user?.email },
+      role: scope.role,
+    };
   }
 }

@@ -222,7 +222,9 @@ export class UsageEventsRepository {
     // filter clause the metric functions apply, added here so §1.8's
     // "re-scope the statement to that filter" is actually true.
     if (args.filter) {
-      clauses.push(eq(dimensionColumn(args.filter.dimension), args.filter.value));
+      clauses.push(
+        eq(dimensionColumn(args.filter.dimension), args.filter.value),
+      );
     }
     const where = and(...clauses);
     const groupCol = dimensionColumn(args.groupBy);
@@ -258,5 +260,40 @@ export class UsageEventsRepository {
     };
 
     return { rows, totals };
+  }
+
+  /**
+   * Backs the Budgets screen's scope Select (spec §2.4): real project/team/
+   * model values that actually appear in this org's events, not a free-text
+   * field a client could point at a nonexistent scope. One query per
+   * dimension rather than a `UNION` — three small scoped scans over an
+   * already-indexed `(org_id, occurred_at)` column, simpler to read than a
+   * hand-built `UNION ALL`, and cheap at demo data volume.
+   */
+  async listDistinctDimensionValues(
+    scope: TenantScope,
+  ): Promise<{ dimension: Exclude<Dimension, 'time'>; value: string }[]> {
+    const dimensions: Exclude<Dimension, 'time'>[] = [
+      'project',
+      'team',
+      'model',
+    ];
+    const results = await Promise.all(
+      dimensions.map(async (dimension) => {
+        const column =
+          dimension === 'project'
+            ? usageEvents.project
+            : dimension === 'team'
+              ? usageEvents.team
+              : usageEvents.model;
+        const rows = await this.db
+          .selectDistinct({ value: column })
+          .from(usageEvents)
+          .where(orgScope(usageEvents.orgId, scope))
+          .limit(50);
+        return rows.map((r) => ({ dimension, value: r.value }));
+      }),
+    );
+    return results.flat();
   }
 }

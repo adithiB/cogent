@@ -6,10 +6,15 @@ import type { App } from 'supertest/types';
 import { AppModule } from '../src/app.module';
 import { DRIZZLE, type Database } from '../src/db/drizzle.token';
 import { orgs, users, memberships, usageEvents } from '../src/db/schema';
-import { Role, scopeFromVerifiedClaims } from '../src/db/scope';
+import {
+  Role,
+  scopeFromVerifiedClaims,
+  type TenantScope,
+} from '../src/db/scope';
 import { MembershipsRepository } from '../src/db/repositories/memberships.repository';
 import { OrgsRepository } from '../src/db/repositories/orgs.repository';
 import { UsageEventsRepository } from '../src/db/repositories/usage-events.repository';
+import { BudgetAlertsRepository } from '../src/db/repositories/budget-alerts.repository';
 import { ACCESS_COOKIE } from '../src/auth/cookies';
 import { OllamaAssistantClient } from '../src/assistant/ollama-client';
 
@@ -371,6 +376,129 @@ describe('Tenant isolation (query-layer enforcement)', () => {
     expect(rows[0].spendMicros).toBe(5_000_000);
     expect(rows.some((r) => r.lineItem === projectA)).toBe(false);
     expect(totals.spendMicros).toBe(5_000_000);
+  });
+});
+
+/**
+ * cogent-ui-implementation-spec.md §2.4 / this session's build prompt:
+ * `budget_alerts` gets the same contract-test coverage every other scoped
+ * table has — one case per exported function, seeded with real cross-tenant
+ * data, asserting the other org's scope never reaches it.
+ */
+describe('Tenant isolation — budget alerts (spec §2.4)', () => {
+  let app: INestApplication;
+  let db: Database;
+  let budgetAlertsRepo: BudgetAlertsRepository;
+
+  let orgG: { id: string; name: string };
+  let orgH: { id: string; name: string };
+  let scopeG: TenantScope;
+  let scopeH: TenantScope;
+
+  beforeAll(async () => {
+    const moduleFixture: TestingModule = await Test.createTestingModule({
+      imports: [AppModule],
+    }).compile();
+
+    app = moduleFixture.createNestApplication();
+    app.setGlobalPrefix('api');
+    await app.init();
+
+    db = app.get(DRIZZLE);
+    budgetAlertsRepo = app.get(BudgetAlertsRepository);
+
+    const suffix = Date.now();
+    [orgG] = await db
+      .insert(orgs)
+      .values({
+        name: `Isolation Budgets Org G ${suffix}`,
+        slug: `iso-budgets-g-${suffix}`,
+      })
+      .returning({ id: orgs.id, name: orgs.name });
+    [orgH] = await db
+      .insert(orgs)
+      .values({
+        name: `Isolation Budgets Org H ${suffix}`,
+        slug: `iso-budgets-h-${suffix}`,
+      })
+      .returning({ id: orgs.id, name: orgs.name });
+
+    scopeG = scopeFromVerifiedClaims({
+      sub: 'seed',
+      org: orgG.id,
+      role: Role.Owner,
+    });
+    scopeH = scopeFromVerifiedClaims({
+      sub: 'seed',
+      org: orgH.id,
+      role: Role.Owner,
+    });
+
+    await budgetAlertsRepo.create(scopeG, {
+      scopeDimension: 'project',
+      scopeValue: 'proj-g',
+      thresholdType: 'amount',
+      thresholdAmountMicros: 2_000_000_000,
+      thresholdPercent: null,
+      budgetAmountMicros: null,
+      notifyEmail: 'owner-g@example.test',
+    });
+    await budgetAlertsRepo.create(scopeH, {
+      scopeDimension: 'project',
+      scopeValue: 'proj-h',
+      thresholdType: 'percent',
+      thresholdAmountMicros: null,
+      thresholdPercent: 80,
+      budgetAmountMicros: 5_000_000_000,
+      notifyEmail: 'owner-h@example.test',
+    });
+  });
+
+  afterAll(async () => {
+    await db.delete(orgs).where(eq(orgs.id, orgG.id));
+    await db.delete(orgs).where(eq(orgs.id, orgH.id));
+    await app.close();
+  });
+
+  it('list: org G scope returns only proj-g, never proj-h', async () => {
+    const rows = await budgetAlertsRepo.list(scopeG);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].scopeValue).toBe('proj-g');
+  });
+
+  it('list: org H scope returns only proj-h, never proj-g', async () => {
+    const rows = await budgetAlertsRepo.list(scopeH);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].scopeValue).toBe('proj-h');
+  });
+
+  it("findByScope: org H's scope cannot resolve org G's alert by naming its dimension/value", async () => {
+    const found = await budgetAlertsRepo.findByScope(
+      scopeH,
+      'project',
+      'proj-g',
+    );
+    expect(found).toBeUndefined();
+  });
+
+  it("remove: org H's scope cannot delete org G's alert by id — zero rows affected, row still exists", async () => {
+    const [gAlert] = await budgetAlertsRepo.list(scopeG);
+    const removed = await budgetAlertsRepo.remove(scopeH, gAlert.id);
+    expect(removed).toBe(false);
+
+    const stillThere = await budgetAlertsRepo.findByScope(
+      scopeG,
+      'project',
+      'proj-g',
+    );
+    expect(stillThere?.id).toBe(gAlert.id);
+  });
+
+  it("remove: org G's own scope can delete its own alert", async () => {
+    const [gAlert] = await budgetAlertsRepo.list(scopeG);
+    const removed = await budgetAlertsRepo.remove(scopeG, gAlert.id);
+    expect(removed).toBe(true);
+    expect(await budgetAlertsRepo.list(scopeG)).toHaveLength(0);
   });
 });
 
