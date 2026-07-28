@@ -19,6 +19,7 @@
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e": "jest --config ./test/jest-e2e.json",
+    "seed:demo": "ts-node -r tsconfig-paths/register scripts/seed-demo-data.ts",
     "verify:token-estimate": "ts-node -r tsconfig-paths/register scripts/verify-token-estimate.ts",
     "verify:ollama-tool-calling": "ts-node -r tsconfig-paths/register scripts/verify-ollama-tool-calling.ts",
     "db:generate": "drizzle-kit generate",
