@@ -1,6 +1,6 @@
 # ADR-0004: The NL-query assistant is LLM function-calling bound to ADR-0002's five functions, with intent derived server-side and a per-query cost ceiling enforced before spend
 
-**Status:** Proposed — awaiting approval before implementation
+**Status:** Accepted and built — but **read the 2026-07-23 amendment at the bottom before the body**: Decision 3's per-token dollar cost rests on a paid-hosted-API premise this project does not hold. The assistant ships on local Ollama (`llama3.2:3B`), and the ceiling is re-derived as a compute budget (token admission gate + wall-clock timeout), not dollars. Verified end-to-end 2026-07-28: real signup → real ingestion → real point and slice answers grounded in the ingested rows.
 **Date:** 2026-07-23 (schedule-v2 §4 "Jul 25" slot, pulled forward — consistent with ADR-0001/0002 running ~2 days ahead of the calendar)
 **Scope:** MVP, interview-critical. This is the differentiating feature; full rigor. `schedule-v2.md` §0 names it the single milestone that must work end-to-end; §4 Jul 25 calls it "the single highest-value day on this calendar."
 **Resolves:** `schedule-v2.md` §4 Jul 25 ("Zod allow-list schema … LLM function-calling against it, server-side token accounting, per-query $0.02 ceiling, the `intent: 'point' | 'slice'` contract"); `cogent-ui-implementation-spec.md` §2.3 (NL-query assistant surface), §1.8 (query-answer routing contract), §0 items 5–7 (locked guardrail decisions).

@@ -1,6 +1,6 @@
 # ADR-0001: Hand-rolled JWT auth, org-scoped RBAC enforced at the query layer, and signup-creates-tenant
 
-**Status:** Proposed — awaiting approval before implementation
+**Status:** Accepted and built. Amended 2026-07-26 by [ADR-0005](./0005-deploy-topology-and-the-production-ollama-boundary.md) §Decision-1 — §1b/§1c's `SameSite=Lax`/`Strict` reasoning assumed web and API share a site, which stopped being true on a split-host deploy; both cookies now flip to `SameSite=None; Secure` under `COGENT_CROSS_SITE_COOKIES`. Verified live (real signup, login persistence across a hard reload, `httpOnly` unreadable from JS) on the public deploy, 2026-07-28.
 **Date:** 2026-07-20
 **Scope:** MVP, interview-critical. Full rigor.
 **Resolves:** `portfolio-plan.md` §Project 2 Core-MVP item 1 ("Hand-rolled JWT auth (access token + httpOnly refresh) + org-scoped RBAC enforced at the query layer") and resume bullet 2 ("Designed org-scoped RBAC enforced at the data-access layer and hand-rolled JWT auth, with defense-in-depth tenant isolation"); `cogent-ui-implementation-spec.md` §2.1 and §4-Locked's auth line ("signup creates the org/tenant; no remember me; token handling server-side, invisible to UI"); §1.6's "`orgId` is read server-side from the JWT claim and injected into every query. It is never a client-controllable parameter."
