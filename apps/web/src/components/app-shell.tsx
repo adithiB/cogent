@@ -1,10 +1,13 @@
 "use client";
 
+import { useEffect } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 
 import { OrgSwitcher } from "@/components/org-switcher";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { Skeleton } from "@/components/ui/skeleton";
+import { useSession } from "@/lib/hooks/use-session";
 import { cn } from "@/lib/utils";
 
 const NAV_ITEMS = [
@@ -18,9 +21,40 @@ const NAV_ITEMS = [
  * center nav stays visually centered once Avatar lands next to ThemeToggle —
  * omitted here, it needs user identity data (`session` currently returns
  * only org + role) that this session doesn't add.
+ *
+ * Auth gate lives here, not per-page: every screen behind this layout
+ * (Statement, Budgets, Settings) requires a session, and OrgSwitcher already
+ * silently no-ops on `isError` — that was masking the real gap (found live,
+ * deploy session 2026-07-27): nothing anywhere redirected an unauthenticated
+ * visitor to `/login`, so an anonymous visit rendered the full shell with a
+ * generic `StatementErrorState` instead of the milestone's "correct
+ * empty/redirect state." One check here, not one per page, for the same
+ * reason ADR-0001 keeps org-scope enforcement to a single seam.
  */
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
+  const session = useSession();
+
+  useEffect(() => {
+    if (session.isError) {
+      router.replace("/login");
+    }
+  }, [session.isError, router]);
+
+  if (session.isPending || session.isError) {
+    return (
+      <div className="flex min-h-full flex-col">
+        <header className="border-b border-border bg-surface">
+          <div className="mx-auto h-14 max-w-[1000px] px-4" />
+        </header>
+        <main className="mx-auto w-full max-w-[1000px] flex-1 space-y-4 px-4 py-8">
+          <Skeleton className="h-8 w-64" />
+          <Skeleton className="h-40 w-full" />
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="flex min-h-full flex-col">
