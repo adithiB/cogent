@@ -22,6 +22,9 @@ export function hashPassword(plaintext: string): Promise<string> {
   return hash(plaintext, ARGON2_OPTIONS);
 }
 
-export function verifyPassword(hashValue: string, plaintext: string): Promise<boolean> {
+export function verifyPassword(
+  hashValue: string,
+  plaintext: string,
+): Promise<boolean> {
   return verify(hashValue, plaintext);
 }

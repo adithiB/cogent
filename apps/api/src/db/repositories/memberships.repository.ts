@@ -16,7 +16,9 @@ export class MembershipsRepository {
    * ADR-0001 §Decision-4), so this returns that single row.
    */
   findFirstForUser(userId: string) {
-    return this.db.query.memberships.findFirst({ where: eq(memberships.userId, userId) });
+    return this.db.query.memberships.findFirst({
+      where: eq(memberships.userId, userId),
+    });
   }
 
   /**

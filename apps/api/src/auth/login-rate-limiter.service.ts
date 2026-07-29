@@ -28,7 +28,10 @@ export class LoginRateLimiterService {
       if (entry && entry.lockedUntil > now) {
         const retryAfterSeconds = Math.ceil((entry.lockedUntil - now) / 1000);
         throw new HttpException(
-          { message: 'Too many attempts. Try again shortly.', retryAfterSeconds },
+          {
+            message: 'Too many attempts. Try again shortly.',
+            retryAfterSeconds,
+          },
           HttpStatus.TOO_MANY_REQUESTS,
         );
       }

@@ -31,7 +31,7 @@ import { OllamaAssistantClient } from '../src/assistant/ollama-client';
  */
 
 function extractAccessCookie(res: request.Response): string {
-  const raw = res.headers['set-cookie'];
+  const raw = res.headers['set-cookie'] as string[] | string | undefined;
   const cookies = Array.isArray(raw)
     ? raw
     : [raw].filter((c): c is string => Boolean(c));

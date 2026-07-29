@@ -26,7 +26,10 @@ export class RefreshTokensRepository {
   constructor(@Inject(DRIZZLE) private readonly db: Database) {}
 
   /** Starts a brand-new rotation family — called only at login/signup. */
-  async issueNewFamily(userId: string, orgId: string): Promise<IssuedRefreshToken> {
+  async issueNewFamily(
+    userId: string,
+    orgId: string,
+  ): Promise<IssuedRefreshToken> {
     const token = generateOpaqueToken();
     const familyId = crypto.randomUUID();
     const expiresAt = new Date(Date.now() + REFRESH_TOKEN_TTL_MS);
@@ -51,12 +54,15 @@ export class RefreshTokensRepository {
    *  - found and live → this token is consumed (revoked, `replacedBy` set)
    *    and a fresh token in the *same family* is issued and returned.
    */
-  async rotate(
-    presentedToken: string,
-  ): Promise<
+  async rotate(presentedToken: string): Promise<
     | { outcome: 'invalid' }
     | { outcome: 'reused'; familyId: string }
-    | { outcome: 'rotated'; userId: string; orgId: string; next: IssuedRefreshToken }
+    | {
+        outcome: 'rotated';
+        userId: string;
+        orgId: string;
+        next: IssuedRefreshToken;
+      }
   > {
     const tokenHash = hashToken(presentedToken);
     const row = await this.db.query.refreshTokens.findFirst({
@@ -103,7 +109,12 @@ export class RefreshTokensRepository {
     await this.db
       .update(refreshTokens)
       .set({ revokedAt: new Date() })
-      .where(and(eq(refreshTokens.familyId, familyId), isNull(refreshTokens.revokedAt)));
+      .where(
+        and(
+          eq(refreshTokens.familyId, familyId),
+          isNull(refreshTokens.revokedAt),
+        ),
+      );
   }
 
   /** Logout: revoke the family the presented token belongs to. */

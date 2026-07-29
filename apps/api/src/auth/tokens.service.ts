@@ -20,8 +20,16 @@ export class TokensService {
   }
 
   /** Login/signup: mint a brand-new access token + a brand-new refresh family. */
-  async issueSession(res: Response, userId: string, orgId: string, role: Role): Promise<void> {
-    const accessToken = await signAccessToken({ sub: userId, org: orgId, role }, this.jwtSecret);
+  async issueSession(
+    res: Response,
+    userId: string,
+    orgId: string,
+    role: Role,
+  ): Promise<void> {
+    const accessToken = await signAccessToken(
+      { sub: userId, org: orgId, role },
+      this.jwtSecret,
+    );
     const refresh = await this.refreshTokens.issueNewFamily(userId, orgId);
 
     setAccessCookie(res, accessToken);
@@ -34,7 +42,10 @@ export class TokensService {
    * forward — this is what makes refresh double as the re-authorization
    * checkpoint (§1d), not just a liveness check.
    */
-  async refreshSession(res: Response, presentedRefreshToken: string): Promise<void> {
+  async refreshSession(
+    res: Response,
+    presentedRefreshToken: string,
+  ): Promise<void> {
     const result = await this.refreshTokens.rotate(presentedRefreshToken);
 
     if (result.outcome === 'invalid') {
@@ -45,15 +56,22 @@ export class TokensService {
     if (result.outcome === 'reused') {
       await this.refreshTokens.revokeFamily(result.familyId);
       clearAuthCookies(res);
-      throw new UnauthorizedException('Session invalidated — please sign in again.');
+      throw new UnauthorizedException(
+        'Session invalidated — please sign in again.',
+      );
     }
 
-    const membership = await this.memberships.findByUserAndOrg(result.userId, result.orgId);
+    const membership = await this.memberships.findByUserAndOrg(
+      result.userId,
+      result.orgId,
+    );
     if (!membership) {
       // The user was removed from the org since the token was issued.
       await this.refreshTokens.revokeFamily(result.next.familyId);
       clearAuthCookies(res);
-      throw new UnauthorizedException('You no longer have access to this organization.');
+      throw new UnauthorizedException(
+        'You no longer have access to this organization.',
+      );
     }
 
     const accessToken = await signAccessToken(
@@ -65,7 +83,10 @@ export class TokensService {
     setRefreshCookie(res, result.next.token, result.next.expiresAt);
   }
 
-  async endSession(res: Response, presentedRefreshToken: string | undefined): Promise<void> {
+  async endSession(
+    res: Response,
+    presentedRefreshToken: string | undefined,
+  ): Promise<void> {
     if (presentedRefreshToken) {
       await this.refreshTokens.revokeByToken(presentedRefreshToken);
     }
