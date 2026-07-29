@@ -30,3 +30,7 @@ Recorded with their mechanisms so "how would you make this production-grade?" ha
 - **The hourly query-count throttle** — 0003, 0004; deliberately not built, because the per-query ceiling closes the cost hole while the throttle is a volume control the demo never exercises.
 - **DynamoDB, rejected** — 0002. Choosing not to add a database, with the reasoning written down, rather than adding one for the résumé line.
 - **Running Ollama on a VM-class free tier** (Oracle Cloud Ampere A1) — 0005, scoped and declined for this phase rather than left unexamined.
+
+## What CI actually checks
+
+[`.github/workflows/ci.yml`](../../.github/workflows/ci.yml) runs lint, typecheck, build, and `apps/api`'s unit test suite on every push and PR to `main`. It deliberately does **not** run `test:e2e` or the `verify:*` scripts, for the same reason 0004 and 0005 both apply elsewhere: a check that can't actually run for real is worse than no check. `test:e2e`'s assistant describe block needs a live Ollama daemon — a 42–131s cold warm-up (0004's amendment) a GitHub-hosted runner doesn't provision — and three of its cases have a pre-existing, tracked cross-tenant-cookie gap ([`known-issues.md`](../known-issues.md)) that would either fail CI on missing infrastructure or hide inside 150s of expected-looking flakiness. The comment in the workflow file names this inline rather than leaving a silent gap between what CI's badge implies and what it actually covers.
