@@ -43,7 +43,11 @@ export function setAccessCookie(res: Response, token: string): void {
  * refresh call is a cross-site fetch even though it's same-origin-initiated
  * by the page's own JS — so this cookie needs the same `None` override.
  */
-export function setRefreshCookie(res: Response, token: string, expiresAt: Date): void {
+export function setRefreshCookie(
+  res: Response,
+  token: string,
+  expiresAt: Date,
+): void {
   res.cookie(REFRESH_COOKIE, token, {
     httpOnly: true,
     secure: secureFlag(),
