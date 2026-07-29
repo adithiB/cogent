@@ -1,5 +1,6 @@
 {
   "name": "cogent-ai",
+  "license": "MIT",
   "private": true,
   "workspaces": [
     "apps/*",

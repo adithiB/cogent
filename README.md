@@ -122,3 +122,7 @@ This section exists because "it's implemented" and "I watched it work" are diffe
 - **[`docs/demo-walkthrough.md`](./docs/demo-walkthrough.md)** — reproduce the demo locally, screenshot by screenshot.
 - **`docs/cogent-ui-implementation-spec.md`** — the UI/UX spec the frontend was built against.
 - **[`docs/known-issues.md`](./docs/known-issues.md)** — open defects, kept open until actually fixed.
+
+## License
+
+[MIT](./LICENSE)
