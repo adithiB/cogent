@@ -24,3 +24,14 @@ jobs:
       - run: npm run typecheck
 
       - run: npm run build
+
+      # apps/api's `test` (jest, unit only) needs neither Postgres nor
+      # Ollama - repositories and services are exercised against mocks.
+      # test:e2e and the verify:* scripts are deliberately excluded: they
+      # need a live Ollama daemon (a 42-131s cold warm-up, measured - see
+      # docs/adr/0004-nl-query-assistant-function-calling-intent-and-cost-cap.md)
+      # this runner doesn't provision, and three e2e cases have a
+      # pre-existing tracked 401 gap (docs/known-issues.md). Running them
+      # here would fail on missing infra or bury a real regression inside
+      # 150s of expected-flaky noise.
+      - run: npm run test
