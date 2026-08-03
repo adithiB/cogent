@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import type { INestApplication } from '@nestjs/common';
 import { eq } from 'drizzle-orm';
+import cookieParser from 'cookie-parser';
 import request from 'supertest';
 import type { App } from 'supertest/types';
 import { AppModule } from '../src/app.module';
@@ -792,6 +793,12 @@ describe('Tenant isolation — NL-query assistant (ADR-0004)', () => {
       .compile();
     app = moduleFixture.createNestApplication();
     app.setGlobalPrefix('api');
+    // main.ts registers cookie-parser at bootstrap; createNestApplication()
+    // bypasses main.ts entirely, so without this AuthGuard reads an
+    // undefined req.cookies and every cookie-authenticated request below
+    // 401s before touching real auth logic — a test-harness gap, not an
+    // auth-path defect (see docs/known-issues.md).
+    app.use(cookieParser());
     await app.init();
     db = app.get(DRIZZLE);
 
