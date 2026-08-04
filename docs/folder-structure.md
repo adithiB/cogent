@@ -87,6 +87,7 @@ Neither is built because nothing in this project currently needs a second consum
 
 ```
 docs/
+├── ai-context.md                single-file onboarding doc for an AI assistant picking up this repo cold
 ├── adr/                       every architecture decision record + its index
 ├── architecture.md             this doc's companion — how the system behaves at runtime
 ├── folder-structure.md          you are here

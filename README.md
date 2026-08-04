@@ -122,6 +122,7 @@ This section exists because "it's implemented" and "I watched it work" are diffe
 
 Start with whichever of these answers the question you actually have:
 
+- **[`docs/ai-context.md`](./docs/ai-context.md)** — a single-file onboarding doc for an AI assistant (or a new engineer) picking up this repo cold: goals, architecture, conventions, business logic, generated-vs-handwritten code, the reasoning map across every ADR, common pitfalls, and what's designed-not-built. Consolidates the docs below rather than replacing them.
 - **[`docs/adr/`](./docs/adr/README.md)** — every architectural decision, its alternatives, and the amendments where a later finding revised an earlier belief. Start here for *why* the system looks the way it does.
 - **[`docs/architecture.md`](./docs/architecture.md)** — the deep-dive on *how* it behaves at runtime: request lifecycle, the auth model, the assistant's guardrail pipeline, deployed topology.
 - **[`docs/folder-structure.md`](./docs/folder-structure.md)** — what's in every folder and why.
