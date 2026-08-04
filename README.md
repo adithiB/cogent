@@ -22,6 +22,8 @@ Sign up to create an org — signup *is* tenant creation, and the org you create
 
 ## Architecture
 
+Full deep-dive, including the request lifecycle and the assistant's guardrail pipeline: [`docs/architecture.md`](./docs/architecture.md). Summary:
+
 ```
 apps/
   api        NestJS — auth, ingestion, usage aggregation, budgets, the NL-query assistant
@@ -118,10 +120,21 @@ This section exists because "it's implemented" and "I watched it work" are diffe
 
 ## Documentation
 
-- **[`docs/adr/`](./docs/adr/README.md)** — every architectural decision, its alternatives, and the amendments where a later finding revised an earlier belief. Start at the index.
+Start with whichever of these answers the question you actually have:
+
+- **[`docs/adr/`](./docs/adr/README.md)** — every architectural decision, its alternatives, and the amendments where a later finding revised an earlier belief. Start here for *why* the system looks the way it does.
+- **[`docs/architecture.md`](./docs/architecture.md)** — the deep-dive on *how* it behaves at runtime: request lifecycle, the auth model, the assistant's guardrail pipeline, deployed topology.
+- **[`docs/folder-structure.md`](./docs/folder-structure.md)** — what's in every folder and why.
+- **[`docs/setup-guide.md`](./docs/setup-guide.md)** — local setup, step by step, including the slow paths that aren't bugs.
+- **[`docs/deployment-guide.md`](./docs/deployment-guide.md)** — how the live Vercel/Render/Neon deploy is configured, and how to reproduce it.
+- **[`docs/environment-variables.md`](./docs/environment-variables.md)** — every env var, in both apps, what it does and what happens if it's missing.
+- **[`docs/api-documentation.md`](./docs/api-documentation.md)** — every REST endpoint, request/response shapes, auth requirements.
+- **[`docs/database-schema.md`](./docs/database-schema.md)** — every table, with an ER diagram and the tenant-isolation invariant explained.
+- **[`docs/component-documentation.md`](./docs/component-documentation.md)** — the web app's component inventory, organized by feature.
+- **[`docs/known-issues.md`](./docs/known-issues.md)** — open defects, kept open until actually fixed.
+- **[`docs/roadmap.md`](./docs/roadmap.md)** — designed-not-built items and genuine next steps, distinct from known-issues.
 - **[`docs/demo-walkthrough.md`](./docs/demo-walkthrough.md)** — reproduce the demo locally, screenshot by screenshot.
 - **`docs/cogent-ui-implementation-spec.md`** — the UI/UX spec the frontend was built against.
-- **[`docs/known-issues.md`](./docs/known-issues.md)** — open defects, kept open until actually fixed.
 
 ## License
 
