@@ -8,7 +8,7 @@ Every significant decision in this repo, with the alternatives considered and th
 |---|---|---|
 | [0001](./0001-hand-rolled-jwt-and-org-scoped-rbac.md) | Hand-rolled JWT auth, org-scoped RBAC enforced at the query layer, signup creates the tenant | Accepted, built · amended by 0005 |
 | [0002](./0002-usage-event-persistence-single-path-ingestion-and-named-aggregation-layer.md) | Usage events in Postgres, one synchronous ingestion path, reads through named allow-listed aggregation functions | Accepted, built |
-| [0003](./0003-nl-query-guardrails.md) | NL-query guardrails: allow-listed query schema + per-query ceiling (the shape) | Accepted |
+| [0003](./0003-nl-query-guardrails.md) | NL-query guardrails: allow-listed query schema + per-query ceiling (the shape) | Accepted · amended 2026-08-04 |
 | [0004](./0004-nl-query-assistant-function-calling-intent-and-cost-cap.md) | The assistant is LLM function-calling bound to 0002's functions; `intent` derived server-side; ceiling enforced before spend (the binding) | Accepted, built · **superseded in part by its own 2026-07-23 amendment** |
 | [0005](./0005-deploy-topology-and-the-production-ollama-boundary.md) | Deploy topology (Vercel + separate API host), cross-site cookies, and no Ollama in production | Accepted, built |
 

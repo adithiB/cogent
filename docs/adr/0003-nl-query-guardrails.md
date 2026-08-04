@@ -1,6 +1,6 @@
 # ADR-0003: NL-query assistant guardrails: allow-listed query schema + per-query cost ceiling
 
-- Status: Accepted
+- Status: Accepted. **Amended 2026-08-04** — read the amendment at the bottom before §Decision 4 and §6: the dollar cost ceiling, the ≤2-round-trip framing, the DynamoDB mention in §1, and §6's claim that `intent` is "a property of the function, not inferred at runtime" were all superseded by ADR-0004 and its own 2026-07-23 amendment. This ADR was never updated to say so until a documentation audit found the gap.
 - Date: 2026-07-05
 - Scope: MVP (interview-critical). This is the differentiating feature; full rigor applies.
 - **Numbering note:** Deferred by ADR-0001 and ADR-0002 (each of which said this ADR becomes `0003` on approval) until the session that finally binds it — ADR-0004 (`0004-nl-query-assistant-function-calling-intent-and-cost-cap.md`), renamed here on that ADR's approval.
@@ -87,3 +87,39 @@ UI consequence of the locked MVP scope (reflect across all four screens):
 - Hourly query-count throttle (designed above).
 - Caching identical queries within a short window to avoid re-paying for repeated questions.
 - Compositional / multi-step queries (raises the round-trip cap and the ceiling — revisit deliberately, not by default).
+
+---
+
+## Amendment (2026-08-04) — four claims in the body did not survive ADR-0004 and its own 2026-07-23 amendment; this ADR was never corrected to say so
+
+**Status of what this amends:** ADR-0004 built the binding this ADR only sketched the shape of, and ADR-0004's same-day amendment then reversed the cost model the shape was built on — dollars to a local compute budget, Ollama instead of a hosted model. ADR-0004 named that reversal explicitly, in writing, the day it happened. This ADR did not get the same treatment: its Status line stayed a bare "Accepted" for twelve days while its own Decision 4 and §6 quietly stopped being true. A 2026-08-04 documentation audit is what caught it, not the build session that caused it. Per this branch's own rule — name the gap, don't silently patch the body — the text below is left exactly as written on 2026-07-05, and this section is the correction of record.
+
+### 1. Decision 4's dollar ceiling — superseded
+
+The body's §4 sets "a hard ceiling (target `$0.02`)" enforced by "the server tracks actual token usage and hard-stops," with a client-side "≈ $0.006" estimate and a post-answer "$0.006 / $0.02" tag. None of this survives ADR-0004's 2026-07-23 amendment §3, which re-derives the ceiling as a **pre-compute token admission gate** (`checkAdmission()`, 500 question tokens against a computed ~2,749-token fixed prefix) plus a **45-second wall-clock timeout backstop** (`REQUEST_TIMEOUT_MS` in `apps/api/src/assistant/budget-gate.ts`, renamed from `cost-gate.ts` — no pricing constant survives in that file). The enforce-*before*-spend ordering the body argued for is exactly what carries forward; only what gets measured (dollars → tokens and wall-time) changed. The UI reflects this: `apps/web/src/components/statement/cost-cap-card.tsx` reads "Query paused — over the per-query compute budget," `~{tok} estimated, {tok} budget" — no `$` anywhere in either the client estimate (`ask-bar.tsx`) or the post-answer meter (`answer-block.tsx`).
+
+### 2. "≤2 tool-call round-trips" — superseded
+
+The body's §4 sketches "a small cap on tool-call round-trips (≤2)." ADR-0004 §Decision 3a tightened this to **exactly one** model call, structurally: the mapping call returns one tool_use, and the answer is rendered by a deterministic server-side template — there is no second (synthesis) call to bound, so there is no round-trip count left to cap. `assistant.service.ts` dispatches once per request; nothing in the codebase makes a second model call.
+
+### 3. §6 — `intent` is derived server-side at runtime, not a static property of the function
+
+This is the one worth flagging most precisely, because the body's claim and the shipped behavior are direct opposites, not just differently worded. The body's §6 says: *"This is declared per function in the Zod schema — **a property of the function, not inferred at runtime**."* ADR-0004 §Decision 2 states the opposite and built it that way: *"Not inherent to the function. `getSpend` returns either a point or a slice; the function does not 'know' which… Derived, server-side, deterministically"* from whether the validated arguments include `groupBy`. Verified in `usage-events.repository.ts`: each of the four metric functions computes `intent` from `groupBy`'s presence in the parsed args at call time — there is no per-function static discriminator anywhere in the schema. The property this ADR actually cares about — the UI switches on `intent` and never infers it itself — still holds; only the mechanism that produces `intent` is different from what's written above.
+
+### 4. §1's "SQL/DynamoDB query" — DynamoDB was rejected before this ADR was even renumbered
+
+The body's §1 describes each allow-listed function as "backed by a hand-written, parameterized SQL/DynamoDB query." ADR-0002 §Decision 1 (2026-07-22) rejected DynamoDB outright — hot-partition analysis against this product's write distribution — and shipped a single Postgres `usage_events` table. No DynamoDB dependency, config, or code path exists anywhere in the repo. The word survives here only because this ADR's body predates ADR-0002 and was never swept for the reference once the database decision landed.
+
+### 5. What is explicitly NOT reopened
+
+The properties this ADR exists to guarantee are untouched by any of the above, and ADR-0004 built directly against them without amendment:
+- **Allow-listed functions, not generated SQL** (§1/§2) — the five-name hardcoded dispatch, Zod schema as the sole allow-list, `filter.value` reaching the database only as a bound parameter.
+- **Tenant scope server-injected, never model-controlled** (§3) — no tool's input schema has ever had an `orgId` field.
+- **Deterministic out-of-scope fallback** (§5) — `report_out_of_scope` is still a forced structured tool call, not a keyword pre-filter, and still costs at most one bounded call.
+- **`intent` still drives presentation deterministically** (§6) — only *how* it's computed changed (point 3 above), not that the UI trusts it unconditionally.
+
+### 6. Corrections this amendment makes to the record
+
+- **This ADR's Status** now reads "Amended 2026-08-04," matching the header note added above, instead of implying the 2026-07-05 body is still the operative design.
+- **`docs/adr/README.md`'s index row for 0003** currently reads "Accepted" with no amendment marker — it should be updated to match ADR-0001's and ADR-0004's rows, which both name their amending ADR/date inline. Not changed by this amendment (out of this file's scope), flagged here so it isn't mistaken for having been fixed.
+- **No code changes.** Every discrepancy above is a documentation gap, not a behavior gap — the shipped system already matches ADR-0004 and its amendment; only this ADR's text was stale.
