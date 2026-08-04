@@ -1,6 +1,6 @@
 # ADR-0001: Hand-rolled JWT auth, org-scoped RBAC enforced at the query layer, and signup-creates-tenant
 
-**Status:** Accepted and built. Amended 2026-07-26 by [ADR-0005](./0005-deploy-topology-and-the-production-ollama-boundary.md) §Decision-1 — §1b/§1c's `SameSite=Lax`/`Strict` reasoning assumed web and API share a site, which stopped being true on a split-host deploy; both cookies now flip to `SameSite=None; Secure` under `COGENT_CROSS_SITE_COOKIES`. Verified live (real signup, login persistence across a hard reload, `httpOnly` unreadable from JS) on the public deploy, 2026-07-28.
+**Status:** Accepted and built. Amended 2026-07-26 by [ADR-0005](./0005-deploy-topology-and-the-production-ollama-boundary.md) §Decision-1 — §1b/§1c's `SameSite=Lax`/`Strict` reasoning assumed web and API share a site, which stopped being true on a split-host deploy; both cookies now flip to `SameSite=None; Secure` under `COGENT_CROSS_SITE_COOKIES`. Verified live (real signup, login persistence across a hard reload, `httpOnly` unreadable from JS) on the public deploy, 2026-07-28. **Amended again 2026-08-05** — see amendment at the bottom: §Decision-4 claimed budget-alert CRUD was "the MVP's one privileged action set" against a read surface, but no route checked `scope.role` until this date. A documentation audit found the gap; `RolesGuard`/`@Roles(Role.Owner)` now enforce it.
 **Date:** 2026-07-20
 **Scope:** MVP, interview-critical. Full rigor.
 **Resolves:** `portfolio-plan.md` §Project 2 Core-MVP item 1 ("Hand-rolled JWT auth (access token + httpOnly refresh) + org-scoped RBAC enforced at the query layer") and resume bullet 2 ("Designed org-scoped RBAC enforced at the data-access layer and hand-rolled JWT auth, with defense-in-depth tenant isolation"); `cogent-ui-implementation-spec.md` §2.1 and §4-Locked's auth line ("signup creates the org/tenant; no remember me; token handling server-side, invisible to UI"); §1.6's "`orgId` is read server-side from the JWT claim and injected into every query. It is never a client-controllable parameter."
@@ -235,3 +235,45 @@ Per this branch's method, and directly mirroring ADR-0007's adversarial standard
 7. **Screen 2.1 against the spec:** split ≥900px, single column <900px, ledger motif hidden <640px; org-name field present on signup only with its helper text; error banner reads exactly "Email or password is incorrect."; `role="alert"` on the banner; focus moves to the first error on failed submit; password toggle carries `aria-pressed`.
 
 **Any of 1–6 failing is a finding reported as a finding, not worked around.**
+
+---
+
+## Amendment (2026-08-05) — §Decision-4's "one privileged action set" claim was never enforced; `RolesGuard` closes the gap
+
+**Status of what this amends:** not a reversal — the schema, the two-role design, and §Decision-4's reasoning for why two roles are enough are all still correct. What was wrong is narrower and more concrete: §Decision-4 states *"Cogent's MVP has exactly one privileged action set (budget alert CRUD, and later member invites) against a read surface (the Statement, the assistant). Two roles express that exactly."* That sentence describes a system where `role` gates something. No route ever read `scope.role` to decide anything — a `member` and an `owner` had byte-identical permissions everywhere in the API. A 2026-08-05 documentation audit is what found this, not the build session that shipped the schema; the schema was real, the enforcement was not, and the ADR asserted both as if they were the same fact.
+
+### 1. What was missing, stated precisely
+
+`TenantScope.role` (`db/scope.ts`) has always been populated correctly — `AuthGuard` derives it from the verified JWT, `POST /auth/refresh` re-reads it from the `memberships` row on every rotation (§1c). The value was always right. Nothing downstream ever branched on it. `BudgetsController` — the exact surface §Decision-4 names as "the privileged action set" — was `AuthGuard`-only on every route, `create` and `remove` included. A signed-up `owner` and a hypothetically-invited `member` could both create and delete budget alerts identically. The two-role schema was real; the thing the roles were supposed to *do* was decorative, which is precisely the failure mode §Decision-4 itself warns against for a third role ("`schema that looks like judgment and is actually decoration`") — the warning applied to the two roles that shipped, not just to a hypothetical third one.
+
+### 2. The fix — a route-level guard, not a service-level `if`
+
+`RolesGuard` (`apps/api/src/auth/roles.guard.ts`) plus a `@Roles(...)` decorator (`roles.decorator.ts`), the standard NestJS metadata-guard pattern — consistent with the app's existing guard model (`AuthGuard`, `ApiKeyGuard`) rather than introducing a new enforcement shape. `RolesGuard` reads required roles off the handler via `Reflector`; a route with no `@Roles()` is unaffected (`requiredRoles` empty/undefined → passes through), so every existing route needed zero changes. It must run **after** `AuthGuard` in the guard list — it reads `req.scope.role`, which only `AuthGuard`/`ApiKeyGuard` populate — and NestJS guards run in declared array order, so `@UseGuards(AuthGuard, RolesGuard)` is load-bearing, not stylistic. A role mismatch throws `ForbiddenException` (403), not a silent pass and not the enumeration-safe 404 §Decision-3 uses for cross-tenant resource lookups — the requester's identity and org are not in question here, only whether their role permits the action, which is a different fact than "does this resource exist for you."
+
+Wired into exactly two routes: `BudgetsController.create` and `.remove`, both now `@UseGuards(AuthGuard, RolesGuard)` + `@Roles(Role.Owner)`.
+
+### 3. Why mutations only, and not the full CRUD surface — the interpretation call this amendment has to make explicit
+
+§Decision-4's own sentence sets up the split it should have enforced: "budget alert CRUD" (privileged) against "a read surface (the Statement, the assistant)." Read literally, listing budget alerts isn't named as part of either bucket. Two readings were available:
+
+- **(a) Gate all four budget-alert routes** (`list`, `scope-options`, `create`, `remove`) to `owner` — treats "CRUD" as one indivisible privileged unit.
+- **(b) Gate only the mutations** (`create`, `remove`) — treats "read surface" as the general principle (any authenticated org member can see their org's own data) and "privileged" as specifically *changing* something.
+
+**(b) is what shipped.** It's the standard SaaS RBAC shape — broad read, narrow write — and it's the one an interviewer doesn't have to be talked into: a `member` who can't see what spending guardrails their own org has configured is a stranger justification than a `member` who can't unilaterally change the org's financial alerting. Reading further into §Decision-4 supports it too — the Statement and the assistant are explicitly "a read surface," and nothing in the ADR suggests budget *visibility* specifically should be owner-only the way budget *mutation* should. Recorded here as a judgment call, not a re-derivation from a sentence that was ambiguous on this exact point.
+
+### 4. Verification
+
+- **Unit:** `roles.guard.spec.ts` (5 cases) — passes through with no `@Roles()` metadata and with an empty roles array; allows a matching role; denies a mismatched role with `ForbiddenException`; confirms the guard reads metadata off the handler, not the class.
+- **Adversarial, over real HTTP — the standard this file already holds itself to.** A new e2e block, `Role-gated budget alert mutations (ADR-0001 amendment)` in `apps/api/test/tenant-isolation.e2e-spec.ts`: real signup produces a real `owner`; a `member` account is constructed directly (see §5 — there is still no invite flow to drive this through the UI) with a real access token minted via the same `signAccessToken` the login/refresh path uses, so the guard is exercised against a genuinely signed, genuinely-scoped credential, not a mocked one. Asserts: a `member` gets 403 on `POST` and on `DELETE` (and the alert survives the attempted delete); a `member` still gets 200 on `GET` (the read surface stays open); an `owner` is unaffected — `POST` still succeeds. Five cases, following this file's own rule that a mocked scope proves nothing about the seam.
+- **Not run against a live Postgres instance** — Docker Desktop does not run on this dev machine, the same limitation `docs/known-issues.md`'s 2026-08-03 entry already names for the previous e2e fix in this file. Verified by `tsc --noEmit` (clean), `eslint` (clean), and the full unit suite (45/45 passing, including the 5 new `RolesGuard` cases) — not by a green e2e run. Confirm the new e2e block on the next CI run or whenever Docker/Postgres is available locally, per the same discipline the 2026-08-03 fix recorded for itself.
+
+### 5. What this amendment does *not* close
+
+**The invite flow is still deferred** (§Decision-4's own "Deliberately not built" line). There is still no signup, invite, or UI path that produces a `member` account — every org today has exactly one user, its `owner`, and the seed script only ever creates an `owner`. `RolesGuard` is real and tested, but until an invite flow exists, the only way a `member` account comes into being at all is the same direct-DB-insert construction the new e2e test uses. That's an honest, narrower claim than "role-based access control is fully live" — it's "the enforcement mechanism is real and proven; the only account type it currently has to gate is `owner`, because nothing yet mints the other one." Worth stating plainly rather than letting this amendment imply more than it does.
+
+### 6. Consequences
+
+- **New files:** `apps/api/src/auth/roles.decorator.ts`, `apps/api/src/auth/roles.guard.ts`, `apps/api/src/auth/roles.guard.spec.ts`.
+- **Changed:** `apps/api/src/budgets/budgets.controller.ts` (`create`/`remove` gain `RolesGuard` + `@Roles(Role.Owner)`); `apps/api/test/tenant-isolation.e2e-spec.ts` (new describe block, plus `signAccessToken`/`hashPassword`/`ConfigService` imports it needed).
+- **No schema or migration change.** `role` and the `roleEnum` were already correct; this amendment is enforcement-only.
+- **`docs/adr/README.md`'s index row for 0001** updated alongside this amendment to note the second amendment date, matching how 0003's and 0005's rows already carry theirs.

@@ -18,6 +18,9 @@ import { UsageEventsRepository } from '../src/db/repositories/usage-events.repos
 import { BudgetAlertsRepository } from '../src/db/repositories/budget-alerts.repository';
 import { ACCESS_COOKIE } from '../src/auth/cookies';
 import { OllamaAssistantClient } from '../src/assistant/ollama-client';
+import { signAccessToken } from '../src/auth/jwt';
+import { hashPassword } from '../src/auth/password';
+import { ConfigService } from '@nestjs/config';
 
 /**
  * ADR-0004, re-targeted by the 2026-07-23/24 amendment: the assistant tests
@@ -500,6 +503,146 @@ describe('Tenant isolation — budget alerts (spec §2.4)', () => {
     const removed = await budgetAlertsRepo.remove(scopeG, gAlert.id);
     expect(removed).toBe(true);
     expect(await budgetAlertsRepo.list(scopeG)).toHaveLength(0);
+  });
+});
+
+/**
+ * ADR-0001 amendment (2026-08-05): the ADR claimed budget-alert CRUD was the
+ * MVP's one privileged action set, but no route checked `scope.role` until
+ * this session's `RolesGuard` — a documentation audit found the two roles
+ * expressed nothing on the wire. This is the adversarial proof for the fix:
+ * a `member`, authenticated and correctly scoped to their own org, still
+ * cannot mutate budget alerts, and an `owner` is unaffected. There is no
+ * signup/invite path that produces a `member` account yet (ADR-0001
+ * §Decision-4, deferred), so the membership row and its access token are
+ * constructed directly — the same way the isolation blocks above construct
+ * scopes for cases the UI can't drive yet.
+ */
+describe('Role-gated budget alert mutations (ADR-0001 amendment)', () => {
+  let app: INestApplication<App>;
+  let db: Database;
+
+  let org: { id: string; name: string };
+  let ownerCookie: string;
+  let memberCookie: string;
+  let existingAlertId: string;
+
+  beforeAll(async () => {
+    const moduleFixture: TestingModule = await Test.createTestingModule({
+      imports: [AppModule],
+    }).compile();
+    app = moduleFixture.createNestApplication();
+    app.setGlobalPrefix('api');
+    app.use(cookieParser());
+    await app.init();
+    db = app.get(DRIZZLE);
+
+    const suffix = Date.now();
+    const signupOwner = await request(app.getHttpServer())
+      .post('/api/auth/signup')
+      .send({
+        email: `iso-roles-owner-${suffix}@example.test`,
+        password: 'correct horse battery staple',
+        orgName: `Isolation Roles Org ${suffix}`,
+      })
+      .expect(201);
+    ownerCookie = extractAccessCookie(signupOwner);
+
+    const orgRow = await db.query.orgs.findFirst({
+      where: eq(orgs.name, `Isolation Roles Org ${suffix}`),
+    });
+    if (!orgRow) throw new Error('Signup did not create the expected org row.');
+    org = orgRow;
+
+    const [memberUser] = await db
+      .insert(users)
+      .values({
+        email: `iso-roles-member-${suffix}@example.test`,
+        passwordHash: await hashPassword('correct horse battery staple'),
+      })
+      .returning({ id: users.id });
+    await db.insert(memberships).values({
+      userId: memberUser.id,
+      orgId: org.id,
+      role: 'member',
+    });
+
+    const secret = app.get(ConfigService).getOrThrow<string>('JWT_SECRET');
+    const memberToken = await signAccessToken(
+      { sub: memberUser.id, org: org.id, role: Role.Member },
+      secret,
+    );
+    memberCookie = `${ACCESS_COOKIE}=${memberToken}`;
+
+    const created = await request(app.getHttpServer())
+      .post('/api/v1/budget-alerts')
+      .set('Cookie', ownerCookie)
+      .send({
+        scopeDimension: 'total',
+        thresholdType: 'amount',
+        thresholdAmount: 500,
+      })
+      .expect(201);
+    existingAlertId = (created.body as { id: string }).id;
+  });
+
+  afterAll(async () => {
+    await db.delete(orgs).where(eq(orgs.id, org.id));
+    await app.close();
+  });
+
+  it('a member cannot create a budget alert — 403, not a silent pass', async () => {
+    await request(app.getHttpServer())
+      .post('/api/v1/budget-alerts')
+      .set('Cookie', memberCookie)
+      .send({
+        scopeDimension: 'project',
+        scopeValue: 'proj-member-attempt',
+        thresholdType: 'amount',
+        thresholdAmount: 100,
+      })
+      .expect(403);
+  });
+
+  it("a member cannot delete the org's budget alert — 403, and the alert survives", async () => {
+    await request(app.getHttpServer())
+      .delete(`/api/v1/budget-alerts/${existingAlertId}`)
+      .set('Cookie', memberCookie)
+      .expect(403);
+
+    const stillListed = await request(app.getHttpServer())
+      .get('/api/v1/budget-alerts')
+      .set('Cookie', ownerCookie)
+      .expect(200);
+    expect(
+      (stillListed.body as { id: string }[]).some(
+        (a) => a.id === existingAlertId,
+      ),
+    ).toBe(true);
+  });
+
+  it("a member can still read the org's budget alerts — the read surface stays open", async () => {
+    const res = await request(app.getHttpServer())
+      .get('/api/v1/budget-alerts')
+      .set('Cookie', memberCookie)
+      .expect(200);
+    expect(Array.isArray(res.body)).toBe(true);
+  });
+
+  it('an owner is unaffected by the gate — create still succeeds', async () => {
+    const res = await request(app.getHttpServer())
+      .post('/api/v1/budget-alerts')
+      .set('Cookie', ownerCookie)
+      .send({
+        scopeDimension: 'project',
+        scopeValue: 'proj-owner-still-works',
+        thresholdType: 'amount',
+        thresholdAmount: 50,
+      })
+      .expect(201);
+    expect((res.body as { scope: { value: string } }).scope.value).toBe(
+      'proj-owner-still-works',
+    );
   });
 });
 
