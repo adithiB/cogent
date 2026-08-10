@@ -136,7 +136,3 @@ Start with whichever of these answers the question you actually have:
 - **[`docs/roadmap.md`](./docs/roadmap.md)** — designed-not-built items and genuine next steps, distinct from known-issues.
 - **[`docs/demo-walkthrough.md`](./docs/demo-walkthrough.md)** — reproduce the demo locally, screenshot by screenshot.
 - **`docs/cogent-ui-implementation-spec.md`** — the UI/UX spec the frontend was built against.
-
-## License
-
-[MIT](./LICENSE)
