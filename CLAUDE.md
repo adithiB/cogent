@@ -1,4 +1,4 @@
-# Cogent-AI --- Claude Code Project Constitution
+# Cogent-AI - Claude Code Project Constitution
 
 ## Purpose
 
